@@ -65,7 +65,11 @@ return [
     |
     */
 
-    'timezone' => 'UTC',
+    'timezone' => 'Europe/Rome',
+    'locale' => 'it',
+    'fallback_locale' => 'it',
+    'faker_locale' => 'it_IT',
+
 
     /*
     |--------------------------------------------------------------------------

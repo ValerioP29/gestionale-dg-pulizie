@@ -1,61 +1,127 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
-
 <p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
+  <img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="280" alt="Laravel Logo">
 </p>
 
-## About Laravel
+<h1 align="center">Gestionale DG Pulizie</h1>
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+Applicazione gestionale sviluppata per la digitalizzazione operativa e amministrativa della società **DG Pulizie**.  
+Basata su **Laravel 11 + Filament + Vue 3 + Tailwind + Sanctum**, con PostgreSQL come database.
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+---
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+## 🚀 Stack Tecnologico
 
-## Learning Laravel
+| Livello | Tecnologia | Scopo |
+|----------|-------------|--------|
+| Backend | Laravel 11 | Core logica, API, autenticazione |
+| Admin Panel | Filament 3 | Gestione ruoli, utenti, documenti, log |
+| Frontend | Vue 3 + Vite + Tailwind + Flowbite | SPA/PWA per dipendenti e responsabili |
+| Database | PostgreSQL | Persistenza dati |
+| Auth | Laravel Sanctum | Session-based login SPA |
+| Ruoli | Spatie Permission | Ruoli e permessi granulari |
+| Storage | AWS S3 (prod) / Local (dev) | Archiviazione file |
+| Versioning | Git + GitHub | Gestione versioni e branching model |
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+---
 
-You may also try the [Laravel Bootcamp](https://bootcamp.laravel.com), where you will be guided through building a modern Laravel application from scratch.
+## ⚙️ Installazione locale (sviluppo)
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+### 1️⃣ Clona il repository
+```bash
+git clone git@github.com:ValerioP29/gestionale-dg-pulizie.git
+cd gestionale-dg-pulizie/laravel
+    
+### 2️⃣ Installa dipendenze backend
+composer install
+cp .env.example .env
+php artisan key:generate
 
-## Laravel Sponsors
+3️⃣ Configura .env
+DB_CONNECTION=pgsql
+DB_HOST=127.0.0.1
+DB_PORT=5432
+DB_DATABASE=gestionale_dev
+DB_USERNAME=gest_user
+DB_PASSWORD=localpass
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+FILESYSTEM_DISK=local
+SANCTUM_STATEFUL_DOMAINS=localhost:5173,127.0.0.1:5173
+SESSION_DOMAIN=localhost
 
-### Premium Partners
+4️⃣ Crea e popola database
+php artisan migrate
+php artisan db:seed --class=RolesSeeder
 
-- **[Vehikl](https://vehikl.com)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Redberry](https://redberry.international/laravel-development)**
-- **[Active Logic](https://activelogic.com)**
+5️⃣ Installa dipendenze frontend
+npm install
 
-## Contributing
+6️⃣ Avvia i server
+npm run dev:full
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+🔐 Autenticazione
 
-## Code of Conduct
+SPA (Vue) e Filament condividono Sanctum come sistema di sessione.
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+API base (routes/api.php) gestisce login/logout/me.
 
-## Security Vulnerabilities
+Ruoli gestiti con Spatie Permission.
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+Esempio rapido login da frontend (Axios):
 
-## License
+import axios from "axios";
+axios.defaults.withCredentials = true;
+await axios.get("/sanctum/csrf-cookie");
+await axios.post("/login", { email, password });
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+🧩 Struttura cartelle principale:
+/app
+  /Models (User.php con HasRoles)
+  /Providers
+/config
+/database
+/public
+/resources
+  /js
+    /src/helpers/auth.js
+    /components
+    /App.vue
+  /css/app.css
+/routes
+  web.php
+  api.php
+
+🧰 Script NPM
+Script	Scopo
+npm run dev	Vite dev server
+npm run build	Compila per produzione
+npm run preview	Anteprima build
+npm run dev:full	Avvia Laravel + Vite insieme
+
+🌩️ Storage remoto (S3)
+
+In .env.production:
+FILESYSTEM_DISK=s3
+AWS_ACCESS_KEY_ID=<key_prod>
+AWS_SECRET_ACCESS_KEY=<secret_prod>
+AWS_DEFAULT_REGION=eu-south-1
+AWS_BUCKET=<bucket_prod>
+In sviluppo, resta local.
+
+🧑‍💻 Accesso pannello admin
+
+URL: http://127.0.0.1:8000/admin
+Utente seedato:
+Email: admin@example.test
+Password: password
+
+🔖 Git & Branch Model
+Branch	Scopo
+main	Produzione
+develop	Sviluppo
+feature/*	Funzionalità
+hotfix/*	Correzioni urgenti
+
+🧾 Licenza
+
+Software proprietario © 2025 DG Pulizie.
+Uso riservato interno e aziendale.
