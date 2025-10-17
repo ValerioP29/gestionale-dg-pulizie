@@ -2,7 +2,6 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -10,40 +9,61 @@ use Spatie\Permission\Traits\HasRoles;
 
 class User extends Authenticatable
 {
-    /** @use HasFactory<\Database\Factories\UserFactory> */
     use HasFactory, Notifiable, HasRoles;
 
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var list<string>
-     */
     protected $fillable = [
-        'name',
+        'first_name',
+        'last_name',
         'email',
         'password',
+        'phone',
+        'active',
     ];
 
-    /**
-     * The attributes that should be hidden for serialization.
-     *
-     * @var list<string>
-     */
     protected $hidden = [
         'password',
         'remember_token',
     ];
 
-    /**
-     * Get the attributes that should be cast.
-     *
-     * @return array<string, string>
-     */
-    protected function casts(): array
+    protected $casts = [
+        'email_verified_at' => 'datetime',
+        'active' => 'boolean',
+        'password' => 'hashed',
+    ];
+
+    public function getFullNameAttribute(): string
     {
-        return [
-            'email_verified_at' => 'datetime',
-            'password' => 'hashed',
-        ];
+        return trim(($this->first_name ?? '') . ' ' . ($this->last_name ?? ''));
     }
+
+    public function siteAssignments() {
+    return $this->hasMany(DgSiteAssignment::class);
+    }
+
+    public function sites() {
+        return $this->belongsToMany(DgSite::class, 'dg_site_assignments')
+                    ->withPivot(['assigned_from', 'assigned_to', 'notes', 'assigned_by'])
+                    ->withTimestamps();
+    }
+
+    public function punches()
+    {
+        return $this->hasMany(DgPunch::class);
+    }
+
+    public function workSessions()
+    {
+        return $this->hasMany(DgWorkSession::class);
+    }
+
+    public function payslips()
+    {
+        return $this->hasMany(\App\Models\DgPayslip::class);
+    }
+
+    public function consents()
+    {
+        return $this->hasMany(\App\Models\DgUserConsent::class);
+    }
+
 }
