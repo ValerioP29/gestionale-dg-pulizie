@@ -1,14 +1,17 @@
 <?php
 
 return [
-    'path' => 'admin',           // /admin
+    'path' => 'admin', // URL base /admin
     'domain' => null,
 
     'auth' => [
-        'guard' => 'web',        // semplice per ora
+        'guard' => 'web', // usa autenticazione Laravel standard
     ],
 
     'brand' => [
-        'name' => env('APP_NAME', 'Gestionale'),
+        'name' => env('APP_NAME', 'Gestionale DG Pulizie'),
     ],
+
+    // lingua predefinita di Filament
+    'locale' => 'it',
 ];
