@@ -13,7 +13,7 @@ class DatabaseSeeder extends Seeder
     {
         // Richiama i seeder reali del progetto
         $this->call([
-            RoleSeeder::class, // ruoli base + admin demo
+            FakeUsersSeeder::class,
             SitesSeeder::class,
             PunchesSeeder::class,
             PayslipsSeeder::class,

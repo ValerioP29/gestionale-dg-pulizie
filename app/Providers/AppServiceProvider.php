@@ -3,32 +3,25 @@
 namespace App\Providers;
 
 use Illuminate\Support\ServiceProvider;
-use Spatie\Activitylog\Models\Activity;
-use App\Observers\ActivityLogObserver;
 use BezhanSalleh\FilamentLanguageSwitch\LanguageSwitch;
+use Filament\Support\Facades\FilamentAsset;
+use Filament\Support\Assets\Js;
+use Illuminate\Support\Facades\Vite; // 👈 aggiungi questa importazione
 
 class AppServiceProvider extends ServiceProvider
 {
-    /**
-     * Register any application services.
-     */
-    public function register(): void
-    {
-        //
-    }
-
-    /**
-     * Bootstrap any application services.
-     */
     public function boot(): void
     {
-   //     Activity::observe(ActivityLogObserver::class);
-
         LanguageSwitch::configureUsing(function (LanguageSwitch $switch) {
             $switch
                 ->locales(['it', 'en'])
                 ->visible(insidePanels: true)
                 ->renderHook('panels::global-search.after');
         });
+
+        // ✅ Usa il facade ufficiale Vite di Laravel
+        FilamentAsset::register([
+            Js::make('address-autocomplete', Vite::asset('resources/js/filament/address-autocomplete.js')),
+        ]);
     }
 }

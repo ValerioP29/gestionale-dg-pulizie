@@ -19,7 +19,7 @@ class UsersStatsWidget extends BaseWidget
                 ->description('Utenti attualmente attivi')
                 ->color('success'),
 
-            Card::make('Dipendenti', User::whereHas('roles', fn($q) => $q->where('name', 'Dipendente'))->count())
+            Card::make('Dipendenti', User::where('role', 'employee')->count())
                 ->description('Utenti con ruolo Dipendente')
                 ->color('info'),
         ];

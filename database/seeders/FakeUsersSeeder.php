@@ -4,44 +4,49 @@ namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
 use App\Models\User;
-use Spatie\Permission\Models\Role;
 use Illuminate\Support\Facades\Hash;
 
 class FakeUsersSeeder extends Seeder
 {
     public function run(): void
     {
-        // 1. Crea i ruoli se non esistono
-        foreach (['Admin', 'HR', 'Capocantiere', 'Dipendente'] as $roleName) {
-            Role::firstOrCreate(['name' => $roleName]);
-        }
-
-        // 2. Admin principale (te)
+        // 1️⃣ Admin principale
         User::updateOrCreate(
             ['email' => 'admin@dg.local'],
             [
-                'first_name' => 'Admin',
-                'last_name'  => 'Principale',
+                'first_name' => 'Valerio',
+                'last_name'  => 'Persiani',
                 'name'       => 'Admin Principale',
                 'phone'      => '0000000000',
                 'active'     => true,
-                'password'   => Hash::make('Fricchio29!'),
+                'role'       => 'admin',
+                'can_login'  => true,
+                'password'   => Hash::make('1234'),
             ]
-        )->assignRole('Admin');
+        );
 
-        // 3. HR
-        User::factory()->count(3)->create()->each(function ($user) {
-            $user->assignRole('HR');
-        });
+        // 2️⃣ Supervisori (gestionali)
+        User::factory()->count(3)->create([
+            'role' => 'supervisor',
+            'can_login' => true,
+            'active' => true,
+            'password' => Hash::make('1234'),
+        ]);
 
-        // 4. Capocantieri
-        User::factory()->count(10)->create()->each(function ($user) {
-            $user->assignRole('Capocantiere');
-        });
+        // 3️⃣ Viewer (es. capocantieri gestionali)
+        User::factory()->count(10)->create([
+            'role' => 'viewer',
+            'can_login' => true,
+            'active' => true,
+            'password' => Hash::make('1234'),
+        ]);
 
-        // 5. Dipendenti
-        User::factory()->count(50)->create()->each(function ($user) {
-            $user->assignRole('Dipendente');
-        });
+        // 4️⃣ Dipendenti (solo app mobile, niente accesso gestionale)
+        User::factory()->count(50)->create([
+            'role' => 'employee',
+            'can_login' => false,
+            'active' => true,
+            'password' => Hash::make('1234'),
+        ]);
     }
 }

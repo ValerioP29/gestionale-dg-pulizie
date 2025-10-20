@@ -9,141 +9,136 @@ use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
-use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Database\Eloquent\Model;
-use Spatie\Permission\Models\Role;
 
 class UserResource extends Resource
 {
+    protected static ?string $policy = \App\Policies\UserPolicy::class;
     protected static ?string $model = User::class;
+
     protected static ?string $navigationIcon = 'heroicon-o-user-group';
     protected static ?string $navigationGroup = 'Anagrafica';
+    protected static ?string $modelLabel = 'Utente';
+    protected static ?string $pluralModelLabel = 'Utenti';
 
-    /** Accesso al menu solo per Admin e HR */
-    public static function shouldRegisterNavigation(): bool
-    {
-        return auth()->user()?->hasAnyRole(['Admin','HR']) ?? false;
-    }
-
-    /** Query globale: Admin e HR vedono tutto, altri niente */
-    public static function getEloquentQuery(): Builder
-    {
-        $user = auth()->user();
-
-        if (!$user) return parent::getEloquentQuery()->whereRaw('1=0');
-
-        if ($user->hasAnyRole(['Admin','HR'])) {
-            return parent::getEloquentQuery();
-        }
-
-        // Capocantiere e Dipendente non devono vedere utenti
-        return parent::getEloquentQuery()->whereRaw('1=0');
-    }
-
-    /** FORM */
     public static function form(Form $form): Form
     {
         return $form->schema([
-            Forms\Components\Section::make('Dati Personali')
+            Forms\Components\Section::make('Dati utente')
                 ->schema([
                     Forms\Components\TextInput::make('first_name')
                         ->label('Nome')
-                        ->required()
                         ->maxLength(100)
-                        ->columnSpan(6),
+                        ->required(),
 
                     Forms\Components\TextInput::make('last_name')
                         ->label('Cognome')
-                        ->required()
                         ->maxLength(100)
-                        ->columnSpan(6),
+                        ->required(),
 
                     Forms\Components\TextInput::make('email')
+                        ->label('Email')
                         ->email()
                         ->required()
-                        ->unique(ignoreRecord: true)
-                        ->maxLength(190)
-                        ->columnSpan(6),
+                        ->unique(ignoreRecord: true),
 
                     Forms\Components\TextInput::make('phone')
                         ->label('Telefono')
                         ->tel()
-                        ->maxLength(30)
-                        ->columnSpan(6),
+                        ->maxLength(20),
+
+                    // Campo ruolo con logica per admin/supervisor
+                    Forms\Components\Select::make('role')
+                        ->label('Ruolo')
+                        ->options(function () {
+                            $user = auth()->user();
+                            if ($user && $user->role === 'supervisor') {
+                                return [
+                                    'viewer' => 'Visualizzatore',
+                                    'employee' => 'Dipendente',
+                                ];
+                            }
+
+                            return [
+                                'admin' => 'Amministratore',
+                                'supervisor' => 'Supervisore',
+                                'viewer' => 'Visualizzatore',
+                                'employee' => 'Dipendente',
+                            ];
+                        })
+                        ->required()
+                        ->native(false),
 
                     Forms\Components\Toggle::make('active')
                         ->label('Attivo')
-                        ->default(true)
-                        ->columnSpan(6),
+                        ->default(true),
                 ])
-                ->columns(12),
+                ->columns(2),
 
-            Forms\Components\Section::make('Ruoli')
+            Forms\Components\Section::make('Sicurezza')
                 ->schema([
-                    Forms\Components\Select::make('roles')
-                        ->label('Ruoli')
-                        ->relationship('roles', 'name')
-                        ->options(fn() => Role::pluck('name', 'name'))
-                        ->multiple()
-                        ->preload()
-                        ->searchable()
-                        ->visible(fn() => auth()->user()->hasAnyRole(['Admin','HR'])),
+                    Forms\Components\TextInput::make('password')
+                        ->label('Password')
+                        ->password()
+                        ->revealable()
+                        ->rule('min:8')
+                        ->required(fn (string $operation) => $operation === 'create')
+                        ->dehydrated(fn ($state) => filled($state))
+                        // hashing gestito dal model setPasswordAttribute
+                        ->helperText(fn (string $operation) => $operation === 'create'
+                            ? 'Obbligatoria in creazione. Verrà salvata in modo sicuro.'
+                            : 'Lascia vuoto per non cambiare la password.'),
                 ])
-                ->visible(fn() => auth()->user()->hasAnyRole(['Admin','HR'])),
+                ->collapsible(),
         ]);
     }
 
-    /** TABELLA */
     public static function table(Table $table): Table
     {
-        return $table
-            ->columns([
-                Tables\Columns\TextColumn::make('first_name')
+        return $table->columns([
+                Tables\Columns\TextColumn::make('full_name')
                     ->label('Nome')
-                    ->sortable()
-                    ->searchable(),
-
-                Tables\Columns\TextColumn::make('last_name')
-                    ->label('Cognome')
-                    ->sortable()
-                    ->searchable(),
-
+                    ->searchable(['first_name', 'last_name', 'name'])
+                    ->sortable(),
                 Tables\Columns\TextColumn::make('email')
-                    ->sortable()
-                    ->searchable(),
-
-                Tables\Columns\TextColumn::make('phone')
-                    ->label('Telefono')
-                    ->toggleable(isToggledHiddenByDefault: true),
-
+                    ->label('Email')
+                    ->searchable()
+                    ->sortable(),
+                Tables\Columns\BadgeColumn::make('role')
+                    ->label('Ruolo')
+                    ->colors([
+                        'success' => 'admin',
+                        'warning' => 'supervisor',
+                        'gray' => 'viewer',
+                        'danger' => 'employee',
+                    ])
+                    ->sortable(),
                 Tables\Columns\IconColumn::make('active')
                     ->label('Attivo')
                     ->boolean(),
-
-                Tables\Columns\TextColumn::make('roles.name')
-                    ->label('Ruoli')
-                    ->badge()
-                    ->sortable()
-                    ->visible(fn() => auth()->user()->hasAnyRole(['Admin','HR'])),
-
-                Tables\Columns\TextColumn::make('created_at')
-                    ->label('Creato')
+                Tables\Columns\TextColumn::make('updated_at')
+                    ->label('Aggiornato')
                     ->dateTime('d/m/Y H:i')
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
+                    ->sortable(),
             ])
             ->filters([
+                Tables\Filters\SelectFilter::make('role')
+                    ->options([
+                        'admin' => 'Amministratore',
+                        'supervisor' => 'Supervisore',
+                        'viewer' => 'Visualizzatore',
+                        'employee' => 'Dipendente',
+                    ]),
                 Tables\Filters\TernaryFilter::make('active')->label('Attivo'),
-                Tables\Filters\SelectFilter::make('roles')
-                    ->label('Ruolo')
-                    ->relationship('roles', 'name')
-                    ->visible(fn() => auth()->user()->hasAnyRole(['Admin','HR'])),
             ])
-            ->defaultSort('first_name')
-            ->paginated([25, 50, 100]);
+            ->actions([
+                Tables\Actions\EditAction::make(),
+                Tables\Actions\DeleteAction::make(),
+            ])
+            ->bulkActions([
+                Tables\Actions\DeleteBulkAction::make(),
+            ]);
     }
 
-    /** CRUD pages */
     public static function getPages(): array
     {
         return [
@@ -151,17 +146,5 @@ class UserResource extends Resource
             'create' => Pages\CreateUser::route('/create'),
             'edit' => Pages\EditUser::route('/{record}/edit'),
         ];
-    }
-
-    /** Disabilita delete per HR */
-    public static function canDelete(Model $record): bool
-    {
-        $user = auth()->user();
-        if (!$user) return false;
-
-        if ($user->hasRole('Admin')) return true;
-        if ($user->hasRole('HR')) return !$record->hasRole('Admin');
-
-        return false;
     }
 }
