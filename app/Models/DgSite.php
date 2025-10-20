@@ -18,12 +18,15 @@ class DgSite extends Model
         'longitude',
         'radius_m',
         'active',
+        'type',
     ];
 
     protected $casts = [
         'latitude' => 'float',
         'longitude' => 'float',
+        'radius_m' => 'integer',
         'active' => 'boolean',
+        'type' => 'string',
     ];
 
     // Relazione: cantiere → assegnazioni
@@ -49,5 +52,35 @@ class DgSite extends Model
     {
         return $this->hasMany(DgWorkSession::class, 'site_id');
     }
+
+    protected static function booted()
+{
+    static::saving(function ($site) {
+        if ($site->isDirty('address') && !empty($site->address)) {
+            $coords = self::geocodeAddress($site->address);
+            if ($coords) {
+                $site->latitude = $coords['lat'];
+                $site->longitude = $coords['lng'];
+            }
+        }
+    });
+}
+
+    public static function geocodeAddress(string $address): ?array
+    {
+        $apiKey = config('services.google_maps.key');
+        $url = "https://maps.googleapis.com/maps/api/geocode/json?address=" . urlencode($address) . "&key=" . $apiKey;
+
+        $response = @file_get_contents($url);
+        if (!$response) return null;
+
+        $data = json_decode($response, true);
+        if (!empty($data['results'][0]['geometry']['location'])) {
+            return $data['results'][0]['geometry']['location'];
+        }
+
+        return null;
+    }
+
 
 }

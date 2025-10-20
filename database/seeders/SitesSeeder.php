@@ -12,27 +12,30 @@ class SitesSeeder extends Seeder
     public function run(): void
     {
         DB::table('dg_sites')->insert([
-            [
-                'name' => 'Cantiere Centro Storico',
-                'address' => 'Via Roma 12, Terracina',
-                'latitude' => 41.289101,
-                'longitude' => 13.245812,
-                'radius_m' => 150,
-                'active' => true,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
-            [
-                'name' => 'Cantiere Ospedale',
-                'address' => 'Via San Francesco 8, Terracina',
-                'latitude' => 41.288512,
-                'longitude' => 13.239411,
-                'radius_m' => 200,
-                'active' => true,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ],
-        ]);
+        [
+            'name' => 'Cantiere Centro Storico',
+            'type' => 'privato',
+            'address' => 'Via Roma 12, Terracina',
+            'latitude' => 41.289101,
+            'longitude' => 13.245812,
+            'radius_m' => 150,
+            'active' => true,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ],
+        [
+            'name' => 'Cantiere Ospedale',
+            'type' => 'pubblico',
+            'address' => 'Via San Francesco 8, Terracina',
+            'latitude' => 41.288512,
+            'longitude' => 13.239411,
+            'radius_m' => 200,
+            'active' => true,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ],
+    ]);
+
 
         //Assegna l’admin al primo cantiere
         $admin = User::where('email', 'admin@dg.local')->first();
