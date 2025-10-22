@@ -138,4 +138,12 @@ class DgSiteResource extends Resource
             'edit'   => Pages\EditDgSite::route('/{record}/edit'),
         ];
     }
+
+    public static function getRelations(): array
+    {
+        return [
+            \App\Filament\Resources\DgSiteResource\RelationManagers\AssignmentsRelationManager::class,
+        ];
+    }
+
 }

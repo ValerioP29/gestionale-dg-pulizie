@@ -56,11 +56,14 @@ class User extends Authenticatable implements FilamentUser
             : $value;
     }
 
-    public function getFullNameAttribute(): string
+   public function getFullNameAttribute(): string
     {
-        $name = trim(($this->first_name ?? '') . ' ' . ($this->last_name ?? ''));
+        $parts = array_filter([$this->first_name, $this->last_name]);
+        $name = trim(implode(' ', $parts));
+
         return $name !== '' ? $name : ($this->name ?: ($this->email ?? 'Utente'));
     }
+
 
     /* -------------------------------
      |  Role helpers

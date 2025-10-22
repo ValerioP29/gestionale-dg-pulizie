@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Support\Carbon;
 
 class DgSiteAssignment extends Model
 {
@@ -22,24 +23,32 @@ class DgSiteAssignment extends Model
 
     protected $casts = [
         'assigned_from' => 'date',
-        'assigned_to' => 'date',
+        'assigned_to'   => 'date',
     ];
 
-    // Relazione: assegnazione → utente assegnato
+    // Relazioni
     public function user()
     {
         return $this->belongsTo(User::class);
     }
 
-    // Relazione: assegnazione → cantiere
     public function site()
     {
         return $this->belongsTo(DgSite::class, 'site_id');
     }
 
-    // Relazione: chi ha assegnato (utente admin/HR)
     public function assignedBy()
     {
         return $this->belongsTo(User::class, 'assigned_by');
+    }
+
+    // Attributo derivato: attivo se non ha fine oppure fine >= oggi
+    public function getIsActiveAttribute(): bool
+    {
+        $today = Carbon::today();
+        if (!$this->assigned_from) {
+            return false;
+        }
+        return $this->assigned_to === null || $this->assigned_to->gte($today);
     }
 }
