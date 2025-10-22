@@ -15,7 +15,7 @@ class CalculateSessions extends Command
         $date = $this->argument('date') ?? now()->subDay()->toDateString();
         $this->info("🔄 Calcolo sessioni per la data: {$date}");
 
-        GenerateWorkSessions::dispatchSync(); // lo esegue subito, non in coda
+        GenerateWorkSessions::dispatchSync($date); // lo esegue subito, non in coda
 
         $this->info('✅ Sessioni rigenerate con successo.');
         return Command::SUCCESS;
