@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 
 class DgWorkSession extends Model
 {
@@ -20,14 +21,22 @@ class DgWorkSession extends Model
         'worked_minutes',
         'status',
         'source',
+        // FASE 3
+        'resolved_site_id',
+        'overtime_minutes',
+        'anomaly_flags',
     ];
 
     protected $casts = [
-        'check_in' => 'datetime',
-        'check_out' => 'datetime',
-        'session_date' => 'date',
+        'check_in'        => 'datetime',
+        'check_out'       => 'datetime',
+        'session_date'    => 'date',
+        'worked_minutes'  => 'integer',
+        'overtime_minutes'=> 'integer',
+        'anomaly_flags'   => 'array', // importantissimo
     ];
 
+    /* -------- Relations -------- */
     public function user()
     {
         return $this->belongsTo(User::class);
@@ -38,22 +47,35 @@ class DgWorkSession extends Model
         return $this->belongsTo(DgSite::class, 'site_id');
     }
 
-    /* -------- Helpers -------- */
+    // FASE 3
+    public function resolvedSite()
+    {
+        return $this->belongsTo(DgSite::class, 'resolved_site_id');
+    }
 
+    public function punches()
+    {
+        return $this->hasMany(DgPunch::class, 'session_id');
+    }
+
+    /* -------- Helpers -------- */
     public function getWorkedHoursAttribute(): float
     {
         return round(($this->worked_minutes ?? 0) / 60, 2);
     }
 
+    public function getOvertimeHoursAttribute(): float
+    {
+        return round(($this->overtime_minutes ?? 0) / 60, 2);
+    }
+
     public function getDurationLabelAttribute(): string
     {
-        $hours = floor($this->worked_minutes / 60);
-        $minutes = $this->worked_minutes % 60;
-        return sprintf('%02dh %02dm', $hours, $minutes);
+        $m = (int) ($this->worked_minutes ?? 0);
+        return sprintf('%02dh %02dm', intdiv($m, 60), $m % 60);
     }
 
     /* -------- Scopes -------- */
-
     public function scopeForUser($query, int $userId)
     {
         return $query->where('user_id', $userId);

@@ -26,7 +26,8 @@ class DgSiteAssignment extends Model
         'assigned_to'   => 'date',
     ];
 
-    // Relazioni
+    /* -------- Relazioni -------- */
+
     public function user()
     {
         return $this->belongsTo(User::class);
@@ -42,13 +43,29 @@ class DgSiteAssignment extends Model
         return $this->belongsTo(User::class, 'assigned_by');
     }
 
-    // Attributo derivato: attivo se non ha fine oppure fine >= oggi
+    /* -------- Scope -------- */
+
+    public function scopeActiveAt($query, $date)
+    {
+        return $query
+            ->whereDate('assigned_from', '<=', $date)
+            ->where(function ($q) use ($date) {
+                $q->whereNull('assigned_to')
+                  ->orWhereDate('assigned_to', '>=', $date);
+            });
+    }
+
+    /* -------- Attributo derivato -------- */
+
     public function getIsActiveAttribute(): bool
     {
         $today = Carbon::today();
+
         if (!$this->assigned_from) {
             return false;
         }
-        return $this->assigned_to === null || $this->assigned_to->gte($today);
+
+        return $this->assigned_from->lte($today)
+            && ($this->assigned_to === null || $this->assigned_to->gte($today));
     }
 }

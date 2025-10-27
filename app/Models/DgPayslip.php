@@ -14,18 +14,31 @@ class DgPayslip extends Model
 
     protected $fillable = [
         'user_id',
-        'file_name', 'file_path', 'storage_disk',
-        'mime_type', 'file_size', 'checksum',
-        'period_year', 'period_month',
+        'file_name',
+        'file_path',
+        'storage_disk',
+        'mime_type',
+        'file_size',
+        'checksum',
+        'period_year',
+        'period_month',
         'visible_to_employee',
-        'uploaded_by', 'uploaded_at', 'downloaded_at', 'downloads_count',
+        'uploaded_by',
+        'uploaded_at',
+        'downloaded_at',
+        'downloads_count',
     ];
 
     protected $casts = [
         'visible_to_employee' => 'boolean',
-        'uploaded_at' => 'datetime',
-        'downloaded_at' => 'datetime',
+        'uploaded_at'         => 'datetime',
+        'downloaded_at'       => 'datetime',
+        'deleted_at'          => 'datetime',
+        'period_year'         => 'integer',
+        'period_month'        => 'integer',
     ];
+
+    /* -------- Relazioni -------- */
 
     public function user()
     {
@@ -37,9 +50,16 @@ class DgPayslip extends Model
         return $this->belongsTo(User::class, 'uploaded_by');
     }
 
-    // Comodo per ordinare e mostrare
+    /* -------- Helpers -------- */
+
     public function getPeriodLabelAttribute(): string
     {
         return sprintf('%02d/%d', $this->period_month, $this->period_year);
+    }
+
+    public function scopeForYearMonth($query, int $year, int $month)
+    {
+        return $query->where('period_year', $year)
+                     ->where('period_month', $month);
     }
 }

@@ -19,33 +19,22 @@ class DgSite extends Model
         'radius_m',
         'active',
         'type',
+        'client_id', // utile se vuoi legarlo al cliente nel form Filament
     ];
 
     protected $casts = [
-        'latitude' => 'float',
+        'latitude'  => 'float',
         'longitude' => 'float',
-        'radius_m' => 'integer',
-        'active' => 'boolean',
-        'type' => 'string',
+        'radius_m'  => 'integer',
+        'active'    => 'boolean',
+        'type'      => 'string',
     ];
 
-    // Relazione: cantiere → assegnazioni
+    /* -------- Relazioni -------- */
+
     public function assignments()
     {
         return $this->hasMany(DgSiteAssignment::class, 'site_id');
-    }
-
-    // Relazione: cantiere → utenti (tramite pivot)
-    public function users()
-    {
-        return $this->belongsToMany(User::class, 'dg_site_assignments', 'site_id', 'user_id')
-                    ->withPivot(['assigned_from', 'assigned_to', 'notes', 'assigned_by'])
-                    ->withTimestamps();
-    }
-
-    public function punches()
-    {
-        return $this->hasMany(DgPunch::class, 'site_id');
     }
 
     public function workSessions()
@@ -53,34 +42,48 @@ class DgSite extends Model
         return $this->hasMany(DgWorkSession::class, 'site_id');
     }
 
+    public function punches()
+    {
+        return $this->hasMany(DgPunch::class, 'site_id');
+    }
+
+    public function users()
+    {
+        return $this->belongsToMany(User::class, 'dg_site_assignments', 'site_id', 'user_id')
+                    ->withPivot(['assigned_from', 'assigned_to', 'notes', 'assigned_by'])
+                    ->withTimestamps();
+    }
+
+    public function client()
+    {
+        return $this->belongsTo(DgClient::class);
+    }
+
+    /* -------- Geocoding automatico -------- */
+
     protected static function booted()
-{
-    static::saving(function ($site) {
-        if ($site->isDirty('address') && !empty($site->address)) {
-            $coords = self::geocodeAddress($site->address);
-            if ($coords) {
-                $site->latitude = $coords['lat'];
-                $site->longitude = $coords['lng'];
+    {
+        static::saving(function ($site) {
+            if ($site->isDirty('address') && !empty($site->address)) {
+                $coords = self::geocodeAddress($site->address);
+                if ($coords) {
+                    $site->latitude  = $coords['lat'];
+                    $site->longitude = $coords['lng'];
+                }
             }
-        }
-    });
-}
+        });
+    }
 
     public static function geocodeAddress(string $address): ?array
     {
-        $apiKey = config('services.google_maps.key');
-        $url = "https://maps.googleapis.com/maps/api/geocode/json?address=" . urlencode($address) . "&key=" . $apiKey;
+        $apiKey = config('services.google_maps.key'); // chiave centralizzata
+        if (!$apiKey) return null;
 
+        $url = "https://maps.googleapis.com/maps/api/geocode/json?address=" . urlencode($address) . "&key=" . $apiKey;
         $response = @file_get_contents($url);
         if (!$response) return null;
 
         $data = json_decode($response, true);
-        if (!empty($data['results'][0]['geometry']['location'])) {
-            return $data['results'][0]['geometry']['location'];
-        }
-
-        return null;
+        return $data['results'][0]['geometry']['location'] ?? null;
     }
-
-
 }

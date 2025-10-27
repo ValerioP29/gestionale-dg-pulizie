@@ -26,6 +26,7 @@ class User extends Authenticatable implements FilamentUser
         'last_login_at',
         'created_by',
         'active',
+        'main_site_id',
     ];
 
     protected $hidden = [
@@ -35,9 +36,9 @@ class User extends Authenticatable implements FilamentUser
 
     protected $casts = [
         'email_verified_at' => 'datetime',
-        'last_login_at' => 'datetime',
-        'can_login' => 'boolean',
-        'active' => 'boolean',
+        'last_login_at'     => 'datetime',
+        'can_login'         => 'boolean',
+        'active'            => 'boolean',
     ];
 
     /* -------------------------------
@@ -56,14 +57,12 @@ class User extends Authenticatable implements FilamentUser
             : $value;
     }
 
-   public function getFullNameAttribute(): string
+    public function getFullNameAttribute(): string
     {
         $parts = array_filter([$this->first_name, $this->last_name]);
         $name = trim(implode(' ', $parts));
-
         return $name !== '' ? $name : ($this->name ?: ($this->email ?? 'Utente'));
     }
-
 
     /* -------------------------------
      |  Role helpers
@@ -92,10 +91,9 @@ class User extends Authenticatable implements FilamentUser
         // Ruoli ammessi al gestionale
         return $this->hasAnyRole(['admin', 'supervisor', 'viewer']);
     }
-    
+
     public function getFilamentName(): string
     {
-        // Fallback sicuro e garantito: mai null, mai vuoto
         return trim($this->getFullNameAttribute()) !== ''
             ? $this->getFullNameAttribute()
             : ($this->email ?? 'Utente');
@@ -103,10 +101,12 @@ class User extends Authenticatable implements FilamentUser
 
     public function getUserName(): string
     {
-        // Filament 3 fallback method — evita TypeError
         return $this->getFilamentName();
     }
 
+    /* -------------------------------
+     |  Lifecycle hooks
+     |-------------------------------- */
 
     protected static function booted(): void
     {
@@ -116,5 +116,58 @@ class User extends Authenticatable implements FilamentUser
                 $user->name = $user->email ?? 'Utente';
             }
         });
+    }
+
+    /* -------------------------------
+     |  FASE 3 – Relazioni e scope
+     |-------------------------------- */
+
+    public function mainSite()
+    {
+        return $this->belongsTo(DgSite::class, 'main_site_id');
+    }
+
+    public function siteAssignments()
+    {
+        return $this->hasMany(DgSiteAssignment::class);
+    }
+
+    public function activeSite($date = null)
+    {
+        $date = $date ?? now();
+        return $this->siteAssignments()
+            ->whereDate('assigned_from', '<=', $date)
+            ->where(function ($q) use ($date) {
+                $q->whereNull('assigned_to')->orWhereDate('assigned_to', '>=', $date);
+            })
+            ->latest('assigned_from')
+            ->first();
+    }
+
+    public function workSessions()
+    {
+        return $this->hasMany(DgWorkSession::class);
+    }
+
+    public function punches()
+    {
+        return $this->hasMany(DgPunch::class);
+    }
+
+    public function reports()
+    {
+        return $this->hasMany(DgReportCache::class, 'user_id');
+    }
+
+    public function payslips()
+    {
+        return $this->hasMany(DgPayslip::class, 'user_id');
+    }
+
+    /* -------- Scope -------- */
+
+    public function scopeEmployees($query)
+    {
+        return $query->where('role', 'employee');
     }
 }
