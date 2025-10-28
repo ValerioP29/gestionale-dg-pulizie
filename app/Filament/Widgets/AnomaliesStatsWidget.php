@@ -9,23 +9,39 @@ use Carbon\Carbon;
 
 class AnomaliesStatsWidget extends BaseWidget
 {
+    protected ?string $heading = 'Anomalie (Ultimo mese)';
+    protected int|string|array $columnSpan = 'full';
+
     protected function getCards(): array
     {
-        $today = Carbon::today();
+        $today = Carbon::now();
+
+        $overtimeHours = DgAnomaly::where('type', 'overtime')
+            ->whereMonth('date', $today->month)
+            ->sum('minutes') / 60;
 
         return [
-            Card::make('Assenze (oggi)', DgAnomaly::where('type', 'absence')->whereDate('date', $today)->count())
+            Card::make(
+                'Anomalie Totali',
+                DgAnomaly::whereBetween('date', [$today->copy()->subMonth(), $today])->count()
+            )
+                ->description('Ultimi 30 giorni')
                 ->color('danger'),
 
-            Card::make('Ritardi (oggi)', DgAnomaly::where('type', 'late_entry')->whereDate('date', $today)->count())
+            Card::make(
+                'Anomalie Aperte',
+                DgAnomaly::where('status', 'open')
+                    ->whereBetween('date', [$today->copy()->subMonth(), $today])
+                    ->count()
+            )
+                ->description('Da gestire')
                 ->color('warning'),
 
-            Card::make('Straordinari (mese)',
-                DgAnomaly::where('type', 'overtime')
-                    ->whereMonth('date', $today->month)
-                    ->sum('minutes') / 60
+            Card::make(
+                'Straordinari (mese)',
+                number_format($overtimeHours, 1) . ' h'
             )
-                ->suffix('ore')
+                ->description('Ore extra calcolate')
                 ->color('info'),
         ];
     }
