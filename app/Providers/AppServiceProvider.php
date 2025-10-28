@@ -3,25 +3,35 @@
 namespace App\Providers;
 
 use Illuminate\Support\ServiceProvider;
-use BezhanSalleh\FilamentLanguageSwitch\LanguageSwitch;
 use Filament\Support\Facades\FilamentAsset;
 use Filament\Support\Assets\Js;
-use Illuminate\Support\Facades\Vite; // 👈 aggiungi questa importazione
+use Illuminate\Support\Facades\File;
+
+use App\Models\DgPunch;
+use App\Models\DgWorkSession;
+use Spatie\Activitylog\Models\Activity;
+
+use App\Observers\DgPunchObserver;
+use App\Observers\DgWorkSessionObserver;
+use App\Observers\ActivityLogObserver;
 
 class AppServiceProvider extends ServiceProvider
 {
     public function boot(): void
     {
-        LanguageSwitch::configureUsing(function (LanguageSwitch $switch) {
-            $switch
-                ->locales(['it', 'en'])
-                ->visible(insidePanels: true)
-                ->renderHook('panels::global-search.after');
-        });
+        // Observers
+        DgPunch::observe(DgPunchObserver::class);
+        DgWorkSession::observe(DgWorkSessionObserver::class);
+        Activity::observe(ActivityLogObserver::class);
 
-        // ✅ Usa il facade ufficiale Vite di Laravel
-        FilamentAsset::register([
-            Js::make('address-autocomplete', Vite::asset('resources/js/filament/address-autocomplete.js')),
-        ]);
+        // Filament assets via Vite, solo se manifest presente
+        $manifest = public_path('build/manifest.json');
+        if (File::exists($manifest)) {
+            FilamentAsset::register([
+                Js::make('address-autocomplete', asset('build/assets/address-autocomplete.js')),
+            ]);
+        }
+        // Altrimenti, in dev puoi servirti direttamente di Vite dev server,
+        // ma evitare qui per non rompere in CLI/queue.
     }
 }
