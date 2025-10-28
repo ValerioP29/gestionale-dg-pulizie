@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\DgSiteResource\RelationManagers;
 
 use App\Models\User;
+use App\Models\DgSiteAssignment;
 use App\Filament\Resources\DgSiteAssignmentResource;
 use Filament\Forms;
 use Filament\Forms\Form;
@@ -41,14 +42,13 @@ class AssignmentsRelationManager extends RelationManager
             Forms\Components\DatePicker::make('assigned_from')
                 ->label('Dal')
                 ->required()
-                ->rule('after_or_equal:today')
-                ->helperText('Non puoi impostare una data nel passato.'),
+                ->helperText('Data di inizio'),
 
             Forms\Components\DatePicker::make('assigned_to')
                 ->label('Al')
                 ->nullable()
                 ->rule('after_or_equal:assigned_from')
-                ->helperText('La data di fine non può essere precedente a quella di inizio.'),
+                ->helperText('Se presente, non può precedere la data di inizio.'),
 
             Forms\Components\Textarea::make('notes')
                 ->label('Note')
@@ -74,7 +74,7 @@ class AssignmentsRelationManager extends RelationManager
                         return $data;
                     })
                     ->failureNotificationTitle('Errore di validazione')
-                    ->failureNotification(fn () => 'Verifica i dati: date incoerenti o assegnazione duplicata.'),
+                    ->failureNotification(fn () => 'Date incoerenti o assegnazione duplicata.'),
             ])
             ->actions([
                 Tables\Actions\EditAction::make()

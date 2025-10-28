@@ -28,6 +28,8 @@ class DgSite extends Model
         'radius_m'  => 'integer',
         'active'    => 'boolean',
         'type'      => 'string',
+        'anomaly_flags' => 'array',
+        'session_date' => 'date',
     ];
 
     /* -------- Relazioni -------- */
@@ -85,5 +87,19 @@ class DgSite extends Model
 
         $data = json_decode($response, true);
         return $data['results'][0]['geometry']['location'] ?? null;
+    }
+
+
+    public function getHasAnomaliesAttribute(): bool
+        {
+            return !empty($this->anomaly_flags);
+        }
+
+        public function getAnomalySummaryAttribute(): string
+        {
+            if (!$this->anomaly_flags) return 'Nessuna anomalia';
+            return collect($this->anomaly_flags)
+                ->map(fn ($i) => ($i['type'] ?? '') . ' (' . ($i['minutes'] ?? 0) . ' min)')
+                ->join(' | ');
     }
 }

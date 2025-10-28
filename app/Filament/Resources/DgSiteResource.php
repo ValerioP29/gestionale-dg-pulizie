@@ -4,6 +4,7 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\DgSiteResource\Pages;
 use App\Models\DgSite;
+use App\Models\DgClient;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -32,11 +33,17 @@ class DgSiteResource extends Resource
                         ->maxLength(150)
                         ->unique(ignoreRecord: true),
 
+                    Forms\Components\Select::make('client_id')
+                        ->label('Cliente')
+                        ->options(DgClient::orderBy('name')->pluck('name', 'id'))
+                        ->searchable()
+                        ->nullable(),
+
                     Forms\Components\Select::make('type')
                         ->label('Tipo cantiere')
                         ->options([
                             'pubblico' => 'Pubblico',
-                            'privato' => 'Privato',
+                            'privato'  => 'Privato',
                         ])
                         ->default('privato')
                         ->required(),
@@ -62,7 +69,7 @@ class DgSiteResource extends Resource
                         ->default(250)
                         ->minValue(50)
                         ->suffix('metri')
-                        ->helperText('Raggio usato per il controllo geofence'),
+                        ->helperText('Controllo geofence su timbratura'),
 
                     Forms\Components\Toggle::make('active')
                         ->label('Attivo')
@@ -80,6 +87,11 @@ class DgSiteResource extends Resource
                     ->label('Nome')
                     ->searchable()
                     ->sortable(),
+
+                Tables\Columns\TextColumn::make('client.name')
+                    ->label('Cliente')
+                    ->sortable()
+                    ->toggleable(),
 
                 Tables\Columns\BadgeColumn::make('type')
                     ->label('Tipo')
@@ -99,7 +111,7 @@ class DgSiteResource extends Resource
                     ->formatStateUsing(fn (bool $state): string => $state ? 'Attivo' : 'Disattivo')
                     ->colors([
                         'success' => 'Attivo',
-                        'gray' => 'Disattivo',
+                        'gray'    => 'Disattivo',
                     ]),
 
                 Tables\Columns\TextColumn::make('radius_m')
@@ -111,13 +123,19 @@ class DgSiteResource extends Resource
                     ->dateTime('d/m/Y H:i')
                     ->sortable(),
             ])
+            ->defaultSort('active', 'desc')
             ->filters([
+                SelectFilter::make('client_id')
+                    ->label('Cliente')
+                    ->options(DgClient::orderBy('name')->pluck('name','id')),
+
                 SelectFilter::make('type')
                     ->label('Tipo cantiere')
                     ->options([
                         'pubblico' => 'Pubblico',
                         'privato'  => 'Privato',
                     ]),
+
                 Tables\Filters\TernaryFilter::make('active')
                     ->label('Solo attivi')
                     ->trueLabel('Attivi')
@@ -130,6 +148,13 @@ class DgSiteResource extends Resource
             ]);
     }
 
+    public static function getRelations(): array
+    {
+        return [
+            \App\Filament\Resources\DgSiteResource\RelationManagers\AssignmentsRelationManager::class,
+        ];
+    }
+
     public static function getPages(): array
     {
         return [
@@ -138,12 +163,4 @@ class DgSiteResource extends Resource
             'edit'   => Pages\EditDgSite::route('/{record}/edit'),
         ];
     }
-
-    public static function getRelations(): array
-    {
-        return [
-            \App\Filament\Resources\DgSiteResource\RelationManagers\AssignmentsRelationManager::class,
-        ];
-    }
-
 }
