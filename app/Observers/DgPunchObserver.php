@@ -15,16 +15,21 @@ class DgPunchObserver
     public function creating(DgPunch $punch): void
     {
         // Normalizza type ed evita valore fuori enum
-        $punch->type = strtolower(trim((string)$punch->type));
-        if (!in_array($punch->type, ['in','out'], true)) {
-            $punch->type = 'in';
+        $type = strtolower(trim((string)$punch->type));
+
+        // Accettiamo solo i due valori previsti dal DB
+        if (!in_array($type, ['check_in', 'check_out'], true)) {
+            $type = 'check_in';
         }
+
+        $punch->type = $type;
 
         // UUID se manca
         if (empty($punch->uuid)) {
             $punch->uuid = (string) Str::uuid();
         }
     }
+
 
     public function created(DgPunch $punch): void
     {
@@ -62,7 +67,7 @@ class DgPunchObserver
             }
 
             // Applica check-in/check-out
-            if ($punch->type === 'in') {
+            if ($punch->type === 'check_in') {
                 // Usa il primo check-in valido
                 if (is_null($session->check_in) || $when->lt($session->check_in)) {
                     $session->check_in = $when;
