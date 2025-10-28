@@ -10,20 +10,15 @@ return new class extends Migration
     {
         Schema::create('dg_clients', function (Blueprint $t) {
             $t->id();
-            $t->foreignId('client_group_id')->nullable()
-                ->constrained('dg_client_groups')
-                ->nullOnDelete();
-            $t->string('name');
-            $t->string('vat_number', 20)->nullable();
+            $t->string('name')->unique();
+            $t->foreignId('group_id')->nullable()->constrained('dg_client_groups')->nullOnDelete();
+            $t->string('vat')->nullable();
             $t->string('address')->nullable();
-            $t->string('city')->nullable();
-            $t->string('province', 5)->nullable();
-            $t->string('zip', 10)->nullable();
+            $t->string('email')->nullable();
+            $t->string('phone')->nullable();
             $t->boolean('active')->default(true);
             $t->timestampsTz();
             $t->softDeletesTz();
-
-            $t->index('name');
         });
     }
 

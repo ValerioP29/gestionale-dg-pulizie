@@ -4,49 +4,62 @@ namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
 use App\Models\User;
+use App\Models\DgContractSchedule;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Arr;
 
 class FakeUsersSeeder extends Seeder
 {
     public function run(): void
     {
-        // 1️⃣ Admin principale
+        $fulltime = DgContractSchedule::where('name','Full-time standard')->first();
+        $parttime = DgContractSchedule::where('name','Part-time AM')->first();
+
+        // Admin
         User::updateOrCreate(
-            ['email' => 'admin@dg.local'],
+            ['email' => 'admin@dg.test'],
             [
-                'first_name' => 'Valerio',
-                'last_name'  => 'Persiani',
-                'name'       => 'Admin Principale',
-                'phone'      => '0000000000',
-                'active'     => true,
+                'first_name' => 'Admin',
+                'last_name'  => 'DG',
+                'password'   => Hash::make('password'),
                 'role'       => 'admin',
                 'can_login'  => true,
-                'password'   => Hash::make('1234'),
+                'active'     => true,
+                'contract_schedule_id' => $fulltime?->id,
             ]
         );
 
-        // 2️⃣ Supervisori (gestionali)
-        User::factory()->count(3)->create([
-            'role' => 'supervisor',
-            'can_login' => true,
-            'active' => true,
-            'password' => Hash::make('1234'),
-        ]);
+        // Supervisori
+        for ($i=1; $i<=3; $i++) {
+            User::updateOrCreate(
+                ['email' => "supervisor{$i}@dg.test"],
+                [
+                    'first_name' => 'Supervisor',
+                    'last_name'  => (string)$i,
+                    'password'   => Hash::make('password'),
+                    'role'       => 'supervisor',
+                    'can_login'  => true,
+                    'active'     => true,
+                    'contract_schedule_id' => $fulltime?->id,
+                ]
+            );
+        }
 
-        // 3️⃣ Viewer (es. capocantieri gestionali)
-        User::factory()->count(10)->create([
-            'role' => 'viewer',
-            'can_login' => true,
-            'active' => true,
-            'password' => Hash::make('1234'),
-        ]);
-
-        // 4️⃣ Dipendenti (solo app mobile, niente accesso gestionale)
-        User::factory()->count(50)->create([
-            'role' => 'employee',
-            'can_login' => false,
-            'active' => true,
-            'password' => Hash::make('1234'),
-        ]);
+        // Dipendenti
+        for ($i=1; $i<=25; $i++) {
+            $schedule = Arr::random([$fulltime?->id, $parttime?->id]);
+            User::updateOrCreate(
+                ['email' => "employee{$i}@dg.test"],
+                [
+                    'first_name' => 'Employee',
+                    'last_name'  => (string)$i,
+                    'password'   => Hash::make('password'),
+                    'role'       => 'employee',
+                    'can_login'  => true,
+                    'active'     => true,
+                    'contract_schedule_id' => $schedule,
+                ]
+            );
+        }
     }
 }
