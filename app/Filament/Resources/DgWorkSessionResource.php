@@ -149,9 +149,9 @@ class DgWorkSessionResource extends Resource
                     ->color(fn ($record) => $record->has_anomalies ? 'danger' : 'success'),
             ])
             ->filters([
-                SelectFilter::make('user_id')
+              SelectFilter::make('user_id')
                     ->label('Dipendente')
-                    ->options(User::orderBy('last_name')->pluck('full_name', 'id'))
+                    ->relationship('user', 'full_name')
                     ->searchable(),
 
                 SelectFilter::make('resolved_site_id')
@@ -199,11 +199,35 @@ class DgWorkSessionResource extends Resource
             ->actions([
                 Tables\Actions\ViewAction::make(),
                 Tables\Actions\EditAction::make()->visible(fn () => auth()->user()->hasAnyRole(['admin','supervisor'])),
-                Tables\Actions\DeleteAction::make()->visible(fn () => auth()->user()->hasRole('admin')),
+                Tables\Actions\DeleteAction::make()->visible(fn () => auth()->user()->isRole('admin')),
             ])
             ->headerActions([
-                Tables\Actions\CreateAction::make()->visible(fn () => auth()->user()->hasRole('admin')),
-            ])
+                Tables\Actions\CreateAction::make()->visible(fn () => auth()->user()->isRole('admin')),
+            Tables\Actions\Action::make('scarica_foglio_ore')
+                 ->label('Scarica Foglio Ore Excel')
+                    ->icon('heroicon-o-table-cells')
+                    ->form([
+                        Forms\Components\TextInput::make('year')
+                            ->default(now()->year)
+                            ->numeric()
+                            ->required(),
+                        Forms\Components\Select::make('month')
+                            ->options([
+                                '1'=>'Gennaio','2'=>'Febbraio','3'=>'Marzo','4'=>'Aprile','5'=>'Maggio','6'=>'Giugno',
+                                '7'=>'Luglio','8'=>'Agosto','9'=>'Settembre','10'=>'Ottobre','11'=>'Novembre','12'=>'Dicembre',
+                            ])
+                            ->default(now()->month)
+                            ->required(),
+                    ])
+                    ->action(function ($data) {
+                        return redirect()->route('reports.foglio-ore-excel', [
+                            'year'  => $data['year'],
+                            'month' => $data['month'],
+                        ]);
+                    })
+                    ->visible(fn () => auth()->user()->hasAnyRole(['admin','supervisor'])),
+                            
+                    ])
             ->bulkActions([
                 Tables\Actions\BulkAction::make('approva')
                     ->label('Approva selezionate')
@@ -231,7 +255,7 @@ class DgWorkSessionResource extends Resource
                             $engine->evaluateSession($session);
                         }
                     })
-                    ->visible(fn () => auth()->user()->hasRole('admin')),
+                    ->visible(fn () => auth()->user()->isRole('admin')),
             ]);
     }
 

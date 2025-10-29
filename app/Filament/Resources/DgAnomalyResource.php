@@ -93,9 +93,9 @@ class DgAnomalyResource extends Resource
                     ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->filters([
-                SelectFilter::make('user_id')
+               SelectFilter::make('user_id')
                     ->label('Dipendente')
-                    ->options(User::orderBy('last_name')->pluck('full_name', 'id'))
+                    ->relationship('user', 'full_name')
                     ->searchable(),
 
                 SelectFilter::make('type')
@@ -161,7 +161,7 @@ class DgAnomalyResource extends Resource
                     ->visible(fn () => auth()->user()->hasAnyRole(['admin','supervisor'])),
 
                 Tables\Actions\DeleteAction::make()
-                    ->visible(fn () => auth()->user()->hasRole('admin')),
+                    ->visible(fn () => auth()->user()->isRole('admin')),
             ])
             ->bulkActions([
                 Tables\Actions\BulkAction::make('approva')

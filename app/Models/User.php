@@ -27,6 +27,10 @@ class User extends Authenticatable implements FilamentUser
         'created_by',
         'active',
         'main_site_id',
+        'payroll_code',             
+        'hired_at',                 
+        'contract_end_at',          
+        'contract_hours_monthly',
     ];
 
     protected $hidden = [
@@ -39,6 +43,8 @@ class User extends Authenticatable implements FilamentUser
         'last_login_at'     => 'datetime',
         'can_login'         => 'boolean',
         'active'            => 'boolean',
+        'hired_at'          => 'date',  
+        'contract_end_at'   => 'date', 
     ];
 
     /* -------------------------------

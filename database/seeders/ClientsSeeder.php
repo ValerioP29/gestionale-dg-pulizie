@@ -3,36 +3,58 @@
 namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\DB;
-use Carbon\Carbon;
+use App\Models\DgClient;
+use App\Models\DgClientGroup;
 
 class ClientsSeeder extends Seeder
 {
     public function run(): void
     {
-        $now = Carbon::now();
-        $groupIds = DB::table('dg_client_groups')->pluck('id')->all();
-
-        $names = [
-            'Ospedale San Marco',
-            'Centro Commerciale Le Palme',
-            'Uffici Fininvest',
-            'Condominio Aurora',
-            'Stabilimento MetalTech',
+        $clients = [
+            [
+                'name' => 'Ospedale San Marco',
+                'payroll_client_code' => 'PRIT0000OSM',
+                'payroll_group_code'  => 'PRIT0000SGGE',
+                'group' => 'Gruppo Sanitario'
+            ],
+            [
+                'name' => 'Scuola Rinascita',
+                'payroll_client_code' => 'PRF20500SCU',
+                'payroll_group_code'  => 'PR000000ET00',
+                'group' => 'Gruppo Scuole'
+            ],
+            [
+                'name' => 'Uffici Fijnive',
+                'payroll_client_code' => 'PRE47200UFF',
+                'payroll_group_code'  => 'PR000000MI00',
+                'group' => 'Gruppo Uffici'
+            ],
+            [
+                'name' => 'Condominio Aurora',
+                'payroll_client_code' => 'PRE37500CON',
+                'payroll_group_code'  => 'PR000000BP00',
+                'group' => 'Gruppo Uffici'
+            ],
+            [
+                'name' => 'Museo Cittadino',
+                'payroll_client_code' => 'PRD70800MUS',
+                'payroll_group_code'  => 'PRD70800CASO',
+                'group' => 'Gruppo Uffici'
+            ],
         ];
 
-        foreach ($names as $i => $name) {
-            DB::table('dg_clients')->updateOrInsert(
-                ['name' => $name],
+        foreach ($clients as $c) {
+            $group = DgClientGroup::where('name', $c['group'])->first();
+
+            DgClient::updateOrCreate(
+                ['name' => $c['name']],
                 [
-                    'group_id' => $groupIds[$i % max(count($groupIds),1)] ?? null,
-                    'vat' => 'IT'.str_pad((string)rand(1000000,9999999), 7, '0', STR_PAD_LEFT),
-                    'address' => 'Via Roma '.rand(1,120).', Città',
-                    'email' => 'contatti+'.($i+1).'@clienti.test',
-                    'phone' => '+39 080 '.rand(1000000,9999999),
+                    'group_id' => $group?->id,
+                    'payroll_client_code' => $c['payroll_client_code'],
+                    'payroll_group_code'  => $c['payroll_group_code'],
+                    'vat' => fake()->numerify('IT###########'),
+                    'email' => strtolower(str_replace(' ', '.', $c['name'])) . '@clienti.it',
                     'active' => true,
-                    'created_at' => $now,
-                    'updated_at' => $now,
                 ]
             );
         }

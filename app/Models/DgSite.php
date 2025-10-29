@@ -19,7 +19,8 @@ class DgSite extends Model
         'radius_m',
         'active',
         'type',
-        'client_id', // utile se vuoi legarlo al cliente nel form Filament
+        'client_id',
+        'payroll_site_code', // utile se vuoi legarlo al cliente nel form Filament
     ];
 
     protected $casts = [

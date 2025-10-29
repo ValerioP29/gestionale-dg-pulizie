@@ -1,0 +1,30 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration {
+    public function up(): void
+    {
+        Schema::table('users', function (Blueprint $t) {
+
+            // Aggiungiamo SOLO se manca
+            if (!Schema::hasColumn('users', 'contract_hours_monthly')) {
+                $t->integer('contract_hours_monthly')
+                    ->nullable()
+                    ->after('contract_end_at')
+                    ->index();
+            }
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::table('users', function (Blueprint $t) {
+            if (Schema::hasColumn('users', 'contract_hours_monthly')) {
+                $t->dropColumn('contract_hours_monthly');
+            }
+        });
+    }
+};
