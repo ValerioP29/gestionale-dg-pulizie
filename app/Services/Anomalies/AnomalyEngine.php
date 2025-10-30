@@ -95,39 +95,43 @@ class AnomalyEngine
      */
     private function loadContractFor(int $userId, ?int $siteId, int $weekday): ?ContractDayDTO
     {
-        // weekday → chiavi JSON eloquenti
         $map = ['mon','tue','wed','thu','fri','sat','sun'];
         $dayKey = $map[$weekday] ?? 'mon';
 
-        /** @var User|null $user */
-        $user = User::query()->select(['id','contract_schedule_id'])->find($userId);
-        if (!$user || !$user->contract_schedule_id) {
-            return null; // Nessun contratto → se lavora quel giorno: UNPLANNED_DAY
+        $user = User::select(['id','contract_schedule_id'])->find($userId);
+        if (!$user || !$user->contract_schedule_id) return null;
+
+        $schedule = DgContractSchedule::find($user->contract_schedule_id);
+        if (!$schedule) return null;
+
+        // 1) Se esiste il JSON rules
+        if (!empty($schedule->rules[$dayKey])) {
+            $r = $schedule->rules[$dayKey];
+            $start = ($r['start'] ?? '08:00').':00';
+            $end   = ($r['end']   ?? '12:00').':00';
+            $break = (int)($r['break'] ?? 0);
+
+            return new ContractDayDTO(
+                weekday: $weekday,
+                expectedStart: $start,
+                expectedEnd: $end,
+                breakMinutes: $break
+            );
         }
 
-        /** @var DgContractSchedule|null $schedule */
-        $schedule = DgContractSchedule::query()->select(['id','rules'])->find($user->contract_schedule_id);
-        if (!$schedule || empty($schedule->rules) || empty($schedule->rules[$dayKey])) {
-            return null;
-        }
+        // 2) Fallback alle colonne fisiche (mon/tue/wed…)
+        $hours = $schedule->{$dayKey} ?? 0;
+        if ($hours <= 0) return null;
 
-        $rule = $schedule->rules[$dayKey];
-
-        if ($rule === null) {
-            // Giorno non previsto dal contratto
-            return null;
-        }
-
-        // Normalizza
-        $start = ($rule['start'] ?? '08:00') . ':00';
-        $end   = ($rule['end']   ?? '16:00') . ':00';
-        $break = (int)($rule['break'] ?? 0);
+        $start = '08:00:00';
+        $end   = (CarbonImmutable::parse($start)->addHours($hours))->format('H:i:s');
 
         return new ContractDayDTO(
             weekday: $weekday,
             expectedStart: $start,
             expectedEnd: $end,
-            breakMinutes: $break
+            breakMinutes: 0
         );
     }
+
 }

@@ -18,109 +18,168 @@ class WorkSessionsAndPunchesSeeder extends Seeder
     {
         $engine = new AnomalyEngine();
 
-        $employees = User::where('role', 'employee')
+        // Prendi solo dipendenti con contratto
+        $employees = User::query()
+            ->where('role', 'employee')
             ->whereNotNull('contract_schedule_id')
-            ->get(['id', 'main_site_id', 'contract_schedule_id']);
+            ->get();
 
         if ($employees->isEmpty()) {
+            $this->command?->error('⚠ Nessun dipendente con contratto trovato.');
             return;
         }
 
-        $sites = DgSite::pluck('id')->all();
-        if (empty($sites)) {
+        $sites = DgSite::all();
+        if ($sites->isEmpty()) {
+            $this->command?->error('⚠ Nessun sito presente.');
             return;
         }
 
-        // due mesi di dati reali
-        $period = CarbonPeriod::create(
-            now()->startOfMonth()->subMonths(2),
-            now()->endOfMonth()
-        );
+        // Periodo materiale, NON iteratore consumabile
+        $start = now()->startOfMonth()->subMonths(2)->startOfDay();
+        $end   = now()->endOfMonth()->endOfDay();
+
+        $days = collect(CarbonPeriod::create($start, '1 day', $end))
+            ->map(fn($d) => Carbon::parse($d->toDateString()))
+            ->values();
+
+        // Mappa giorni inglesi -> colonne DB
+        $map = [
+            'monday'    => 'mon',
+            'tuesday'   => 'tue',
+            'wednesday' => 'wed',
+            'thursday'  => 'thu',
+            'friday'    => 'fri',
+            'saturday'  => 'sat',
+            'sunday'    => 'sun',
+        ];
 
         foreach ($employees as $emp) {
             $contract = $emp->contractSchedule;
+            if (!$contract) {
+                continue;
+            }
 
-            foreach ($period as $day) {
+            foreach ($days as $day) {
 
-                $weekday = strtolower($day->format('D')); // mon, tue, wed...
+                // giorno della settimana
+                $weekday = strtolower($day->englishDayOfWeek);
+                $field   = $map[$weekday] ?? null;
 
-                // ore previste dal contratto
-                $expectedHours = $contract->{$weekday} ?? 0;
-                if ($expectedHours <= 0) {
-                    continue; // giorno non lavorativo
-                }
-
-                // 5% probabilità di assenza totale
-                if (rand(1,100) <= 5) {
+                if (!$field) {
                     continue;
                 }
 
-                $siteId = $emp->main_site_id ?? $sites[array_rand($sites)];
+                $expectedHours = (float) ($contract->{$field} ?? 0);
 
-                $start = $day->copy()->setTime(8, 0);
-                $end   = $start->copy()->addHours($expectedHours);
+                // Zero ore -> giornata non minima
+                if ($expectedHours <= 0) {
+                    continue;
+                }
 
-                // variazione realistica
-                $late = rand(0, 15); // fino 15 minuti di ritardo
-                $earlyLeave = rand(0, 10); // fino 10 minuti di uscita anticipata
-                $overtime = rand(0, 100) > 85 ? rand(15, 90) : 0; // 15-90 min straord., non sempre
+                // ~8% assenti
+                if (rand(1,100) <= 8) {
+                    continue;
+                }
 
-                $checkIn  = $start->copy()->addMinutes($late);
-                $checkOut = $end->copy()->subMinutes($earlyLeave)->addMinutes($overtime);
+                // sito
+                $site = $emp->mainSite ?? $sites->random();
 
-                $worked = max(0, $checkOut->diffInMinutes($checkIn));
+                // orario atteso
+                $startTime = $day->copy()->setTime(8,0);
+                $endTime   = $startTime->copy()->addHours($expectedHours);
 
-                // salva sessione
+                $late        = rand(0, 30);
+                $earlyLeave  = rand(0, 20);
+                $overtime    = rand(0, 100) > 90 ? rand(15, 120) : 0;
+
+                $checkIn  = $startTime->copy()->addMinutes($late);
+                $checkOut = $endTime->copy()->subMinutes($earlyLeave)->addMinutes($overtime);
+
+                $missingCheckout = rand(1,10) === 1;
+
+                $worked = $missingCheckout
+                    ? $checkIn->diffInMinutes($endTime)
+                    : $checkOut->diffInMinutes($checkIn);
+
                 $session = DgWorkSession::create([
-                    'user_id'        => $emp->id,
-                    'site_id'        => $siteId,
-                    'session_date'   => $day->toDateString(),
-                    'check_in'       => $checkIn,
-                    'check_out'      => $checkOut,
-                    'worked_minutes' => $worked,
-                    'overtime_minutes' => $overtime,
-                    'status'         => $worked > 0 ? 'complete' : 'invalid',
-                    'source'         => 'auto',
+                    'user_id'         => $emp->id,
+                    'site_id'         => $site->id,
+                    'session_date'    => $day->toDateString(),
+                    'check_in'        => $checkIn,
+                    'check_out'       => $missingCheckout ? null : $checkOut,
+                    'worked_minutes'  => max(0, $worked),
+                    'overtime_minutes'=> $overtime,
+                    'status'          => $worked > 0 ? 'complete' : 'invalid',
+                    'source'          => 'seed',
                 ]);
 
-                // timbrature realistiche
-                DgPunch::create([
-                    'uuid'           => Str::uuid(),
-                    'user_id'        => $emp->id,
-                    'site_id'        => $siteId,
-                    'session_id'     => $session->id,
-                    'type'           => 'check_in',
-                    'created_at'     => $checkIn,
-                    'latitude'       => 41.120000 + (rand(-5,5)/1000),
-                    'longitude'      => 16.870000 + (rand(-5,5)/1000),
-                    'accuracy_m'     => rand(2, 10),
-                    'device_id'      => 'ANDROID_' . rand(100,999),
-                    'device_battery' => rand(20,100),
-                    'network_type'   => rand(0,1) ? 'WiFi' : '4G',
-                    'source'         => 'seed',
-                    'payload'        => ['seed' => true],
-                ]);
+                // PUNCH IN
+                self::punch($emp, $site, $session, 'check_in', $checkIn);
 
-                DgPunch::create([
-                    'uuid'           => Str::uuid(),
-                    'user_id'        => $emp->id,
-                    'site_id'        => $siteId,
-                    'session_id'     => $session->id,
-                    'type'           => 'check_out',
-                    'created_at'     => $checkOut,
-                    'latitude'       => 41.120000 + (rand(-5,5)/1000),
-                    'longitude'      => 16.870000 + (rand(-5,5)/1000),
-                    'accuracy_m'     => rand(2, 10),
-                    'device_id'      => 'ANDROID_' . rand(100,999),
-                    'device_battery' => rand(20,100),
-                    'network_type'   => rand(0,1) ? 'WiFi' : '4G',
-                    'source'         => 'seed',
-                    'payload'        => ['seed' => true],
-                ]);
+                // Doppio check-in
+                if (rand(1,100) <= 30) {
+                    self::punch($emp, $site, $session, 'check_in', $checkIn->copy()->addMinutes(rand(1,10)));
+                }
 
-                // calcolo anomalie
-                $engine->evaluateSession($session);
+                // PUNCH OUT
+                if (!$missingCheckout) {
+                    self::punch($emp, $site, $session, 'check_out', $checkOut);
+
+                    // Doppio check-out
+                    if (rand(1,100) <= 20) {
+                        self::punch($emp, $site, $session, 'check_out', $checkOut->copy()->addMinutes(rand(1,5)));
+                    }
+                }
+
+                // ~15% fuori area
+                if (rand(1,100) <= 15) {
+                    self::punch(
+                        $emp,
+                        $site,
+                        $session,
+                        rand(0,1) ? 'check_in' : 'check_out',
+                        $checkIn->copy()->addMinutes(rand(2,60)),
+                        true
+                    );
+                }
+
+                // Se vuoi, riattiva dopo test
+                // $engine->evaluateSession($session);
             }
         }
+
+        $this->command?->info('✅ WorkSessionsAndPunchesSeeder completato con successo.');
+    }
+
+    private static function punch($emp, $site, $session, $type, $timestamp, $outOfBounds = false)
+    {
+        $lat = 41.120000 + (rand(-20,20)/1000);
+        $lng = 16.870000 + (rand(-20,20)/1000);
+
+        if ($outOfBounds) {
+            $lat += rand(5,20)/1000;
+            $lng += rand(5,20)/1000;
+        }
+
+        DgPunch::create([
+            'uuid'           => Str::uuid(),
+            'user_id'        => $emp->id,
+            'site_id'        => $site->id,
+            'session_id'     => $session->id,
+            'type'           => $type,
+            'created_at'     => $timestamp,
+            'latitude'       => $lat,
+            'longitude'      => $lng,
+            'accuracy_m'     => rand(2,35),
+            'device_id'      => 'DEV_' . rand(100,999),
+            'device_battery' => rand(1,100),
+            'network_type'   => rand(0,1) ? 'WiFi' : '4G',
+            'source'         => 'seed',
+            'payload'        => [
+                'manual_edit' => false,
+                'seed' => true,
+            ]
+        ]);
     }
 }

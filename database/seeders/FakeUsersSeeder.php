@@ -55,40 +55,46 @@ class FakeUsersSeeder extends Seeder
             ]
         );
 
-        // CONTRATTI per dipendenti
+        // Ottieni contratti disponibili
         $contracts = DgContractSchedule::all();
+        if ($contracts->isEmpty()) {
+            $this->command?->error('⚠ Nessun contratto trovato in dg_contract_schedules, impossibile generare dipendenti.');
+            return;
+        }
 
-        $employees = [
-            ['first' => 'Maria',    'last' => 'Teresa',    'mat' => '001', 'hired' => '2018-04-11'],
-            ['first' => 'Inna',     'last' => 'Apreotesei','mat' => '045', 'hired' => '2019-09-12'],
-            ['first' => 'Silvia',   'last' => 'Centra',    'mat' => '058', 'hired' => '2000-05-13'],
-            ['first' => 'Tiziana',  'last' => 'Gambalonga','mat' => '110', 'hired' => '2021-09-23'],
-            ['first' => 'Isabella', 'last' => 'Falconi',   'mat' => '115', 'hired' => '2021-11-02'],
-            ['first' => 'Marcella', 'last' => 'Coppola',   'mat' => '116', 'hired' => '2021-11-02'],
-            ['first' => 'Annarita', 'last' => 'Di Tucci',  'mat' => '118', 'hired' => '2021-11-26'],
-            ['first' => 'Manuel',   'last' => 'Carocci',   'mat' => '131', 'hired' => '2022-03-25'],
-        ];
+        $faker = \Faker\Factory::create('it_IT');
 
-        foreach ($employees as $emp) {
+        // 20 dipendenti finti
+        for ($i = 1; $i <= 20; $i++) {
+            $first  = $faker->firstName;
+            $last   = $faker->lastName;
+            $email  = strtolower(Str::slug($first.'.'.$last)).'@azienda.it';
 
-            $contract = $contracts->random();
+            $hired = $faker->dateTimeBetween('-5 years', 'now');
+            $maybeEnding = rand(1, 10) === 1 // 10% hanno contratto terminato
+                ? $faker->dateTimeBetween($hired, 'now')
+                : null;
 
             User::updateOrCreate(
-                ['email' => strtolower($emp['first']).'.'.strtolower(Str::slug($emp['last'])).'@azienda.it'],
+                ['email' => $email],
                 [
-                    'first_name' => $emp['first'],
-                    'last_name'  => $emp['last'],
-                    'name'       => "{$emp['first']} {$emp['last']}",
-                    'password'   => Hash::make('password'),
+                    'first_name' => $first,
+                    'last_name'  => $last,
+                    'name'       => "$first $last",
+                    'password'   => 'password', // verrà hashata automaticamente dal mutator
                     'role'       => 'employee',
-                    'payroll_code' => $emp['mat'],
-                    'hired_at'     => Carbon::parse($emp['hired']),
-                    'contract_end_at' => null,
-                    'contract_schedule_id' => $contract->id,
-                    'active'     => true,
-                    'can_login'  => true,
+                    'phone'      => $faker->phoneNumber,
+                    'payroll_code' => str_pad((string)$i, 3, '0', STR_PAD_LEFT),
+                    'hired_at'     => Carbon::parse($hired),
+                    'contract_end_at' => $maybeEnding,
+                    'contract_schedule_id' => $contracts->random()->id,
+                    'active' => $maybeEnding === null,
+                    'can_login' => $faker->boolean(90), // 90% possono loggare
+                    'last_login_at' => $faker->dateTimeBetween('-1 year', 'now'),
                 ]
             );
         }
+
+        $this->command?->info('✅ FakeUsersSeeder completato: admin + supervisor + viewer + 20 employees.');
     }
 }

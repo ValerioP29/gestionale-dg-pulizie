@@ -39,7 +39,7 @@ class DgAnomalyResource extends Resource
                     ->date()
                     ->sortable(),
 
-                Tables\Columns\TextColumn::make('user.full_name')
+                Tables\Columns\TextColumn::make('user.name')
                     ->label('Dipendente')
                     ->sortable()
                     ->searchable(),
@@ -95,7 +95,7 @@ class DgAnomalyResource extends Resource
             ->filters([
                SelectFilter::make('user_id')
                     ->label('Dipendente')
-                    ->relationship('user', 'full_name')
+                    ->relationship('user', 'name')
                     ->searchable(),
 
                 SelectFilter::make('type')

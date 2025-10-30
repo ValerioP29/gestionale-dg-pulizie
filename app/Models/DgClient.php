@@ -21,6 +21,7 @@ class DgClient extends Model
         'phone',
         'active',
         'payroll_client_code',
+        'payroll_group_code',
     ];
 
     protected $casts = [

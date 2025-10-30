@@ -27,6 +27,7 @@ class User extends Authenticatable implements FilamentUser
         'created_by',
         'active',
         'main_site_id',
+        'contract_schedule_id',
         'payroll_code',             
         'hired_at',                 
         'contract_end_at',          

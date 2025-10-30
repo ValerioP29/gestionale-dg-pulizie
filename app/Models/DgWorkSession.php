@@ -21,10 +21,16 @@ class DgWorkSession extends Model
         'worked_minutes',
         'status',
         'source',
-        // FASE 3
         'resolved_site_id',
         'overtime_minutes',
         'anomaly_flags',
+        'approval_status',
+        'approved_by',
+        'approved_at',
+        'extra_minutes',
+        'extra_reason',
+        'override_set_by',
+        'override_reason',
     ];
 
     protected $casts = [

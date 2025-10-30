@@ -3,56 +3,74 @@
 namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\DB;
+use App\Models\User;
+use App\Models\DgSite;
+use App\Models\DgSiteAssignment;
 use Carbon\Carbon;
 
 class SiteAssignmentsSeeder extends Seeder
 {
     public function run(): void
     {
-        $employeeIds = DB::table('users')->where('role','employee')->pluck('id')->all();
-        $siteIds     = DB::table('dg_sites')->pluck('id')->all();
-        $adminId     = DB::table('users')->where('role','admin')->value('id');
+        $employees = User::where('role', 'employee')->get();
+        $sites     = DgSite::all();
+        $admins    = User::whereIn('role', ['admin', 'supervisor'])->pluck('id')->all();
 
-        $startBase = Carbon::now()->startOfMonth()->subMonths(1); // dal mese scorso
-        foreach ($employeeIds as $idx => $uid) {
-            // a ciascuno 1-2 cantieri
-            $primarySite = $siteIds[$idx % max(count($siteIds),1)] ?? null;
-            $secondarySite = $siteIds[($idx+3) % max(count($siteIds),1)] ?? null;
+        if ($employees->isEmpty() || $sites->isEmpty()) {
+            $this->command?->error('⚠ Impossibile generare assegnazioni: servono utenti employee e cantieri.');
+            return;
+        }
 
-            if ($primarySite) {
-                DB::table('dg_site_assignments')->updateOrInsert(
-                    ['user_id'=>$uid,'site_id'=>$primarySite,'assigned_from'=>$startBase->copy()->toDateString()],
+        $faker = \Faker\Factory::create('it_IT');
+        $startBase = Carbon::now()->startOfMonth()->subMonths(2);
+
+        foreach ($employees as $employee) {
+
+            // quanti cantieri? 1-3
+            $countSites = rand(1, min(3, $sites->count()));
+            $selectedSites = $sites->random($countSites);
+
+            $isFirst = true;
+
+            foreach ($selectedSites as $site) {
+
+                // date random
+                $assignFrom = $startBase->copy()->addDays(rand(0, 25));
+
+                // 30% hanno assegnazione chiusa
+                $assignTo = rand(1, 10) <= 3
+                    ? $assignFrom->copy()->addDays(rand(5, 40))
+                    : null;
+
+                // 50% hanno una nota
+                $notes = rand(1, 10) <= 5
+                    ? $faker->randomElement([null, 'temporaneo', 'sostituzione', 'urgenza', 'notturno'])
+                    : null;
+
+                // chi li assegna? admin o supervisor
+                $assignedBy = $faker->randomElement($admins);
+
+                DgSiteAssignment::updateOrCreate(
                     [
-                        'assigned_to'=>null,
-                        'assigned_by'=>$adminId,
-                        'notes'=>null,
-                        'created_at'=>Carbon::now(),
-                        'updated_at'=>Carbon::now(),
-                    ]
-                );
-
-                // setta main_site per l'utente
-                DB::table('users')->where('id',$uid)->update(['main_site_id' => $primarySite]);
-            }
-
-            // circa metà hanno anche un secondo cantiere temporaneo
-            if ($secondarySite && $idx % 2 === 0) {
-                DB::table('dg_site_assignments')->updateOrInsert(
-                    [
-                        'user_id'=>$uid,
-                        'site_id'=>$secondarySite,
-                        'assigned_from'=>$startBase->copy()->addDays(10)->toDateString()
+                        'user_id' => $employee->id,
+                        'site_id' => $site->id,
+                        'assigned_from' => $assignFrom->toDateString(),
                     ],
                     [
-                        'assigned_to'=> $startBase->copy()->addDays(25)->toDateString(),
-                        'assigned_by'=>$adminId,
-                        'notes'=>'temporaneo',
-                        'created_at'=>Carbon::now(),
-                        'updated_at'=>Carbon::now(),
+                        'assigned_to' => $assignTo,
+                        'assigned_by' => $assignedBy,
+                        'notes' => $notes,
                     ]
                 );
+
+                // Primo cantiere è quello principale
+                if ($isFirst && $assignTo === null) {
+                    $employee->update(['main_site_id' => $site->id]);
+                    $isFirst = false;
+                }
             }
         }
+
+        $this->command?->info('✅ SiteAssignmentsSeeder completato: assegnazioni generate con varietà realistica.');
     }
 }

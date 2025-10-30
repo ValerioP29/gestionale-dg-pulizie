@@ -13,16 +13,24 @@ class DgContractSchedule extends Model
 
     protected $fillable = [
         'name',
+        'mon','tue','wed','thu','fri','sat','sun',
+        'contract_hours_monthly',
         'rules',
         'active',
     ];
 
     protected $casts = [
-        'rules' => 'array', // JSONB -> array PHP
+        'rules' => 'array',
         'active' => 'boolean',
+        'mon' => 'float',
+        'tue' => 'float',
+        'wed' => 'float',
+        'thu' => 'float',
+        'fri' => 'float',
+        'sat' => 'float',
+        'sun' => 'float',
     ];
 
-    // Utenti che usano questo contratto
     public function users()
     {
         return $this->hasMany(User::class, 'contract_schedule_id');

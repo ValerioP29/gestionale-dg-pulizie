@@ -9,39 +9,58 @@ class DatabaseSeeder extends Seeder
     public function run(): void
     {
         // 1) tasselli base
-        $this->call(DgContractScheduleSeeder::class);
-        $this->call(ClientGroupsSeeder::class);
-        $this->call(ClientsSeeder::class);
-        $this->call(JobTitlesSeeder::class);
+        $this->call([
+            DgContractScheduleSeeder::class,
+            ClientGroupsSeeder::class,
+            ClientsSeeder::class,
+            JobTitlesSeeder::class,
+        ]);
 
         // 2) utenti e cantieri
-        $this->call(FakeUsersSeeder::class);
-        $this->call(SitesSeeder::class);
-        $this->call(SiteAssignmentsSeeder::class);
+        $this->call([
+            FakeUsersSeeder::class,
+            SitesSeeder::class,
+            SiteAssignmentsSeeder::class,
+        ]);
 
-        // 3) dati operativi
-        // Se hai già i tuoi, puoi mantenere i tuoi Devices/UserConsents/SyncQueue/Payslips
-        if (class_exists(\Database\Seeders\DevicesSeeder::class)) {
-            $this->call(\Database\Seeders\DevicesSeeder::class);
-        }
-        if (class_exists(\Database\Seeders\UserConsentsSeeder::class)) {
-            $this->call(\Database\Seeders\UserConsentsSeeder::class);
-        }
-        if (class_exists(\Database\Seeders\SyncQueueSeeder::class)) {
-            $this->call(\Database\Seeders\SyncQueueSeeder::class);
-        }
-
-        // 4) sessioni, timbrature e anomalie generate con l'engine
-        $this->call(WorkSessionsAndPunchesSeeder::class);
-
-        // 5) buste paga
-        if (class_exists(\Database\Seeders\PayslipsSeeder::class)) {
-            $this->call(\Database\Seeders\PayslipsSeeder::class);
-        } else {
-            $this->call(ReportsCacheSeeder::class); // se non hai payslips, generiamo comunque i report
+        // 3) dati operativi extra (se esistono)
+        foreach ([
+            \Database\Seeders\DevicesSeeder::class,
+            \Database\Seeders\UserConsentsSeeder::class,
+            \Database\Seeders\SyncQueueSeeder::class,
+        ] as $seeder) {
+            if (class_exists($seeder)) {
+                $this->call($seeder);
+            }
         }
 
-        // 6) report cache (sempre alla fine, su periodo corrente)
+        // ✅ 4) Punch -> Sessioni -> Report (workflow realistico)
+
+        // ✅ primo: genera TIMBRATURE vere
+        $this->call(PunchSeeder::class);
+
+        // ✅ secondo: ricostruisce sessioni in base ai punch reali
+        $this->call(WorkSessionsFromPunchSeeder::class);
+
+        // ✅ terzo: genera report
         $this->call(ReportsCacheSeeder::class);
+
+        
+        /*
+        ------------------------------------------------------------------
+        ✅ VECCHIO SISTEMA (creava prima sessioni e poi punch)
+           LO LASCIO COMMENTATO PER RIFERIMENTO / BACKUP
+        ------------------------------------------------------------------
+
+        // $this->call(WorkSessionsAndPunchesSeeder::class);
+
+        ------------------------------------------------------------------
+        */
+        
+
+        // 6) buste paga (se esiste il seeder)
+        if (class_exists(\Database\Seeders\PayslipsSeeder::class)) {
+            $this->call(PayslipsSeeder::class);
+        }
     }
 }
