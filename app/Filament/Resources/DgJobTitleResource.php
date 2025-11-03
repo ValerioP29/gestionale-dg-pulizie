@@ -22,17 +22,27 @@ class DgJobTitleResource extends Resource
     public static function form(Form $form): Form
     {
         return $form->schema([
+
             Forms\Components\TextInput::make('code')
                 ->label('Codice')
                 ->required()
                 ->maxLength(32)
-                ->unique(ignoreRecord: true),
+                ->unique(
+                    table: DgJobTitle::class,
+                    column: 'code',
+                    ignoreRecord: true
+                )
+                ->helperText('Un codice univoco per identificare la mansione (es: OP01, ADM02).'),
 
             Forms\Components\TextInput::make('name')
                 ->label('Nome')
                 ->required()
                 ->maxLength(150)
-                ->unique(ignoreRecord: true),
+                ->unique(
+                    table: DgJobTitle::class,
+                    column: 'name',
+                    ignoreRecord: true
+                ),
 
             Forms\Components\Textarea::make('notes')
                 ->label('Note')
@@ -41,15 +51,24 @@ class DgJobTitleResource extends Resource
             Forms\Components\Toggle::make('active')
                 ->label('Attiva')
                 ->default(true),
-        ]);
+        ])
+        ->columns(1);
     }
 
     public static function table(Table $table): Table
     {
         return $table
             ->columns([
-                Tables\Columns\TextColumn::make('code')->label('Codice')->sortable()->searchable(),
-                Tables\Columns\TextColumn::make('name')->label('Nome')->sortable()->searchable(),
+
+                Tables\Columns\TextColumn::make('code')
+                    ->label('Codice')
+                    ->sortable()
+                    ->searchable(),
+
+                Tables\Columns\TextColumn::make('name')
+                    ->label('Nome')
+                    ->sortable()
+                    ->searchable(),
 
                 Tables\Columns\IconColumn::make('active')
                     ->boolean()
@@ -57,7 +76,9 @@ class DgJobTitleResource extends Resource
 
                 Tables\Columns\TextColumn::make('updated_at')
                     ->label('Aggiornata')
-                    ->dateTime('d/m/Y'),
+                    ->dateTime('d/m/Y H:i')
+                    ->sortable()
+                    ->toggleable(isToggledHiddenByDefault: true),
             ])
             ->defaultSort('name')
             ->filters([
@@ -67,9 +88,18 @@ class DgJobTitleResource extends Resource
                     ->falseLabel('Disattive')
                     ->placeholder('Tutte'),
             ])
+            ->headerActions([
+                Tables\Actions\CreateAction::make()
+                    ->label('Nuova Mansione')
+                    ->modalHeading('Crea una nuova mansione')
+                    ->slideOver()
+            ])
             ->actions([
-                Tables\Actions\EditAction::make(),
+                Tables\Actions\EditAction::make()->slideOver(),
                 Tables\Actions\DeleteAction::make(),
+            ])
+            ->bulkActions([
+                Tables\Actions\DeleteBulkAction::make(),
             ]);
     }
 

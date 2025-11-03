@@ -28,10 +28,15 @@ class User extends Authenticatable implements FilamentUser
         'active',
         'main_site_id',
         'contract_schedule_id',
-        'payroll_code',             
-        'hired_at',                 
-        'contract_end_at',          
+        'payroll_code',
+        'hired_at',
+        'contract_end_at',
         'contract_hours_monthly',
+        'job_title_id',
+
+        // nuovi campi contratto
+        'mon','tue','wed','thu','fri','sat','sun',
+        'rules',
     ];
 
     protected $hidden = [
@@ -44,94 +49,91 @@ class User extends Authenticatable implements FilamentUser
         'last_login_at'     => 'datetime',
         'can_login'         => 'boolean',
         'active'            => 'boolean',
-        'hired_at'          => 'date',  
-        'contract_end_at'   => 'date', 
+        'hired_at'          => 'date',
+        'contract_end_at'   => 'date',
+        'rules'             => 'array',
+        'mon'=>'float','tue'=>'float','wed'=>'float','thu'=>'float',
+        'fri'=>'float','sat'=>'float','sun'=>'float',
     ];
 
     /* -------------------------------
-     |  Utility methods
+     | Password
      |-------------------------------- */
-
-    // Hash automatico della password
     public function setPasswordAttribute($value): void
     {
-        if (is_null($value) || $value === '') {
-            return;
-        }
+        if (!$value) return;
 
         $this->attributes['password'] = Hash::needsRehash($value)
             ? Hash::make($value)
             : $value;
     }
 
+    /* -------------------------------
+     | Nome completo
+     |-------------------------------- */
     public function getFullNameAttribute(): string
     {
         $parts = array_filter([$this->first_name, $this->last_name]);
         $name = trim(implode(' ', $parts));
-        return $name !== '' ? $name : ($this->name ?: ($this->email ?? 'Utente'));
+        return $name ?: ($this->name ?: ($this->email ?? 'Utente'));
     }
 
     /* -------------------------------
-     |  Role helpers
+     | Filament access
      |-------------------------------- */
-
-    public function isRole(string $role): bool
-    {
-        return strtolower($this->role) === strtolower($role);
-    }
-
-    public function hasAnyRole(array $roles): bool
-    {
-        return in_array(strtolower($this->role), array_map('strtolower', $roles));
-    }
-
-    /* -------------------------------
-     |  Filament panel access
-     |-------------------------------- */
-
     public function canAccessPanel(Panel $panel): bool
     {
-        if (!$this->can_login) {
-            return false;
-        }
-
-        // Ruoli ammessi al gestionale
-        return $this->hasAnyRole(['admin', 'supervisor', 'viewer']);
+        if (!$this->can_login) return false;
+        return in_array($this->role, ['admin','supervisor','viewer']);
     }
 
     public function getFilamentName(): string
     {
-        return trim($this->getFullNameAttribute()) !== ''
-            ? $this->getFullNameAttribute()
-            : ($this->email ?? 'Utente');
-    }
-
-    public function getUserName(): string
-    {
-        return $this->getFilamentName();
+        return $this->full_name ?: 'Utente';
     }
 
     /* -------------------------------
-     |  Lifecycle hooks
+     | Auto calcoli prima del save
      |-------------------------------- */
-
     protected static function booted(): void
     {
         static::saving(function ($user) {
-            $user->name = trim(($user->first_name ?? '') . ' ' . ($user->last_name ?? ''));
-            if ($user->name === '') {
-                $user->name = $user->email ?? 'Utente';
+
+            // aggiorna name
+            $user->name = trim(($user->first_name ?? '').' '.($user->last_name ?? ''));
+            if ($user->name === '') $user->name = $user->email ?? 'Utente';
+
+            // calcolo ore mese
+            $settimana = ($user->mon + $user->tue + $user->wed + $user->thu + $user->fri + $user->sat + $user->sun);
+
+            if ($settimana > 0) {
+                $user->contract_hours_monthly = round($settimana * 4);
+            }
+            else if ($user->contractSchedule) {
+                $user->contract_hours_monthly = $user->contractSchedule->contract_hours_monthly;
+            }
+            else {
+                $user->contract_hours_monthly = null;
             }
         });
     }
 
     /* -------------------------------
-     |  FASE 3 – Relazioni e scope
+     | Relazioni
      |-------------------------------- */
-
     public function mainSite()
     {
         return $this->belongsTo(DgSite::class, 'main_site_id');
+    }
+
+    public function contractSchedule()
+    {
+        return $this->belongsTo(DgContractSchedule::class, 'contract_schedule_id');
+    }
+
+    public function jobTitle()
+    {
+        return $this->belongsTo(\App\Models\DgJobTitle::class, 'job_title_id');
     }
 
     public function siteAssignments()
@@ -171,10 +173,25 @@ class User extends Authenticatable implements FilamentUser
         return $this->hasMany(DgPayslip::class, 'user_id');
     }
 
-    /* -------- Scope -------- */
-
+    /* -------------------------------
+     | Scope
+     |-------------------------------- */
     public function scopeEmployees($query)
     {
         return $query->where('role', 'employee');
     }
+
+    public function hasAnyRole(array $roles): bool
+    {
+        return in_array(
+            strtolower($this->role),
+            array_map('strtolower', $roles)
+        );
+    }
+
+    public function isRole(string $role): bool
+    {
+        return $this->hasAnyRole([$role]);
+    }
+
 }

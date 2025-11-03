@@ -17,11 +17,11 @@ class DgSiteAssignmentResource extends Resource
 {
     protected static ?string $model = DgSiteAssignment::class;
 
-    protected static ?string $navigationIcon = 'heroicon-o-users';
-    protected static ?string $navigationGroup = 'Gestione Cantieri';
+    // Non deve più comparire nel menu laterale
+    protected static bool $shouldRegisterNavigation = false;
+
     protected static ?string $modelLabel = 'Assegnazione';
     protected static ?string $pluralModelLabel = 'Assegnazioni';
-    protected static ?int $navigationSort = 20;
 
     public static function form(Form $form): Form
     {
@@ -42,26 +42,23 @@ class DgSiteAssignmentResource extends Resource
                         ->toArray();
                 })
                 ->getOptionLabelUsing(fn ($value) => optional(User::find($value))->name ?? '—')
-                ->searchable()
-                ->required(),
+                ->required()
+                ->searchable(),
 
             Forms\Components\Select::make('site_id')
                 ->label('Cantiere')
                 ->options(DgSite::query()->pluck('name', 'id')->toArray())
-                ->searchable()
-                ->required(),
+                ->required()
+                ->searchable(),
 
             Forms\Components\DatePicker::make('assigned_from')
                 ->label('Dal')
-                ->required()
-                ->rule('after_or_equal:today')
-                ->helperText('Non puoi impostare una data nel passato.'),
+                ->required(),
 
             Forms\Components\DatePicker::make('assigned_to')
                 ->label('Al')
                 ->nullable()
-                ->rule('after_or_equal:assigned_from')
-                ->helperText('La data di fine non può essere precedente a quella di inizio.'),
+                ->rule('after_or_equal:assigned_from'),
 
             Forms\Components\Textarea::make('notes')
                 ->label('Note')
@@ -71,8 +68,7 @@ class DgSiteAssignmentResource extends Resource
 
     public static function table(Table $table): Table
     {
-        return $table
-            ->columns([
+        return $table->columns([
                 Tables\Columns\TextColumn::make('user.name')
                     ->label('Dipendente')
                     ->sortable()
@@ -80,8 +76,7 @@ class DgSiteAssignmentResource extends Resource
 
                 Tables\Columns\TextColumn::make('user.email')
                     ->label('Email')
-                    ->sortable()
-                    ->searchable(),
+                    ->sortable(),
 
                 Tables\Columns\TextColumn::make('site.name')
                     ->label('Cantiere')
@@ -93,66 +88,38 @@ class DgSiteAssignmentResource extends Resource
 
                 Tables\Columns\BadgeColumn::make('is_active')
                     ->label('Stato')
+                    ->formatStateUsing(fn ($state) => $state ? 'Attivo' : 'Scaduto')
                     ->colors([
-                        'success' => fn ($state): bool => (bool) $state === true,
-                        'gray'    => fn ($state): bool => (bool) $state === false,
-                    ])
-                    ->formatStateUsing(fn ($state): string => $state ? 'Attivo' : 'Scaduto'),
+                        'success' => fn ($state) => (bool) $state === true,
+                        'gray'    => fn ($state) => (bool) $state === false,
+                    ]),
 
                 Tables\Columns\TextColumn::make('notes')->label('Note')->limit(40),
                 Tables\Columns\TextColumn::make('assignedBy.name')->label('Assegnato da')->default('—'),
             ])
-            ->filters([
-                Tables\Filters\SelectFilter::make('site_id')
-                    ->label('Cantiere')
-                    ->options(DgSite::query()->pluck('name', 'id')->toArray()),
-
-                Tables\Filters\SelectFilter::make('status')
-                    ->label('Stato')
-                    ->options([
-                        'active'  => 'Attivi',
-                        'expired' => 'Scaduti',
-                    ])
-                    ->query(function ($query, array $data) {
-                        $value = $data['value'] ?? null;
-                        if ($value === 'active') {
-                            return $query->where(function ($q) {
-                                $q->whereNull('assigned_to')
-                                  ->orWhere('assigned_to', '>=', now()->toDateString());
-                            });
-                        }
-                        if ($value === 'expired') {
-                            return $query->whereNotNull('assigned_to')
-                                         ->where('assigned_to', '<', now()->toDateString());
-                        }
-                        return $query;
-                    }),
-            ])
             ->actions([
                 Tables\Actions\EditAction::make()
-                    ->mutateFormDataUsing(function (array $data): array {
+                    ->mutateFormDataUsing(function (array $data) {
                         self::validateAssignment($data);
                         $data['assigned_by'] = auth()->id();
                         return $data;
                     }),
+
                 Tables\Actions\DeleteAction::make(),
             ])
             ->headerActions([
                 Tables\Actions\CreateAction::make()
-                    ->mutateFormDataUsing(function (array $data): array {
+                    ->mutateFormDataUsing(function (array $data) {
                         self::validateAssignment($data);
                         $data['assigned_by'] = auth()->id();
                         return $data;
                     })
                     ->failureNotificationTitle('Errore di validazione')
-                    ->failureNotification(fn () => 'Verifica i dati: date incoerenti o assegnazione duplicata.'),
-            ])
-            ->bulkActions([
-                Tables\Actions\DeleteBulkAction::make(),
+                    ->failureNotification(fn () => 'Date incoerenti o assegnazione duplicata.')
             ]);
     }
 
-    /** Controllo sovrapposizioni */
+    /** Regola anti-sovrapposizione */
     protected static function validateAssignment(array $data): void
     {
         $userId = $data['user_id'];
@@ -175,7 +142,7 @@ class DgSiteAssignmentResource extends Resource
 
         if ($overlap) {
             throw ValidationException::withMessages([
-                'user_id' => 'Questo dipendente risulta già assegnato a un cantiere nello stesso periodo.',
+                'site_id' => 'Dipendente già assegnato a un cantiere nello stesso periodo.',
             ]);
         }
     }
