@@ -14,24 +14,17 @@ class DgClient extends Model
 
     protected $fillable = [
         'name',
-        'group_id',
         'vat',
         'address',
         'email',
         'phone',
         'active',
         'payroll_client_code',
-        'payroll_group_code',
     ];
 
     protected $casts = [
         'active' => 'boolean',
     ];
-
-    public function group()
-    {
-        return $this->belongsTo(DgClientGroup::class, 'group_id');
-    }
 
     public function sites()
     {

@@ -37,7 +37,23 @@ class DgSiteResource extends Resource
                         ->label('Cliente')
                         ->options(DgClient::orderBy('name')->pluck('name', 'id'))
                         ->searchable()
+                        ->reactive()
+                        ->afterStateUpdated(function ($state, callable $set) {
+                            if ($state && $client = DgClient::find($state)) {
+                                $set('payroll_client_code_display', $client->payroll_client_code);
+                            }
+                        })
                         ->nullable(),
+
+                    Forms\Components\TextInput::make('payroll_site_code')
+                        ->label('Codice cliente (cantiere)')
+                        ->maxLength(32)
+                        ->required(),
+
+                    Forms\Components\TextInput::make('payroll_client_code_display')
+                        ->label('Codice cliente raggruppato')
+                        ->disabled()
+                        ->dehydrated(false),
 
                     Forms\Components\Select::make('type')
                         ->label('Tipo cantiere')
@@ -84,14 +100,21 @@ class DgSiteResource extends Resource
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('name')
-                    ->label('Nome')
+                    ->label('Nome cantiere')
                     ->searchable()
                     ->sortable(),
 
                 Tables\Columns\TextColumn::make('client.name')
                     ->label('Cliente')
-                    ->sortable()
-                    ->toggleable(),
+                    ->sortable(),
+
+                Tables\Columns\TextColumn::make('client.payroll_client_code')
+                    ->label('Codice cliente raggruppato')
+                    ->sortable(),
+
+                Tables\Columns\TextColumn::make('payroll_site_code')
+                    ->label('Codice cantiere')
+                    ->sortable(),
 
                 Tables\Columns\BadgeColumn::make('type')
                     ->label('Tipo')
@@ -113,15 +136,6 @@ class DgSiteResource extends Resource
                         'success' => 'Attivo',
                         'gray'    => 'Disattivo',
                     ]),
-
-                Tables\Columns\TextColumn::make('radius_m')
-                    ->label('Raggio (m)')
-                    ->alignRight(),
-
-                Tables\Columns\TextColumn::make('updated_at')
-                    ->label('Aggiornato')
-                    ->dateTime('d/m/Y H:i')
-                    ->sortable(),
             ])
             ->defaultSort('active', 'desc')
             ->filters([

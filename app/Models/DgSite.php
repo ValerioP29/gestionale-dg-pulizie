@@ -20,7 +20,7 @@ class DgSite extends Model
         'active',
         'type',
         'client_id',
-        'payroll_site_code', // utile se vuoi legarlo al cliente nel form Filament
+        'payroll_site_code',
     ];
 
     protected $casts = [
@@ -30,10 +30,13 @@ class DgSite extends Model
         'active'    => 'boolean',
         'type'      => 'string',
         'anomaly_flags' => 'array',
-        'session_date' => 'date',
     ];
 
     /* -------- Relazioni -------- */
+    public function client()
+    {
+        return $this->belongsTo(DgClient::class, 'client_id');
+    }
 
     public function assignments()
     {
@@ -50,20 +53,7 @@ class DgSite extends Model
         return $this->hasMany(DgPunch::class, 'site_id');
     }
 
-    public function users()
-    {
-        return $this->belongsToMany(User::class, 'dg_site_assignments', 'site_id', 'user_id')
-                    ->withPivot(['assigned_from', 'assigned_to', 'notes', 'assigned_by'])
-                    ->withTimestamps();
-    }
-
-    public function client()
-    {
-        return $this->belongsTo(DgClient::class);
-    }
-
     /* -------- Geocoding automatico -------- */
-
     protected static function booted()
     {
         static::saving(function ($site) {
@@ -79,7 +69,7 @@ class DgSite extends Model
 
     public static function geocodeAddress(string $address): ?array
     {
-        $apiKey = config('services.google_maps.key'); // chiave centralizzata
+        $apiKey = config('services.google_maps.key');
         if (!$apiKey) return null;
 
         $url = "https://maps.googleapis.com/maps/api/geocode/json?address=" . urlencode($address) . "&key=" . $apiKey;
@@ -90,17 +80,17 @@ class DgSite extends Model
         return $data['results'][0]['geometry']['location'] ?? null;
     }
 
-
+    /* -------- Helpers per anomalie -------- */
     public function getHasAnomaliesAttribute(): bool
-        {
-            return !empty($this->anomaly_flags);
-        }
+    {
+        return !empty($this->anomaly_flags);
+    }
 
-        public function getAnomalySummaryAttribute(): string
-        {
-            if (!$this->anomaly_flags) return 'Nessuna anomalia';
-            return collect($this->anomaly_flags)
-                ->map(fn ($i) => ($i['type'] ?? '') . ' (' . ($i['minutes'] ?? 0) . ' min)')
-                ->join(' | ');
+    public function getAnomalySummaryAttribute(): string
+    {
+        if (!$this->anomaly_flags) return 'Nessuna anomalia';
+        return collect($this->anomaly_flags)
+            ->map(fn ($i) => ($i['type'] ?? '') . ' (' . ($i['minutes'] ?? 0) . ' min)')
+            ->join(' | ');
     }
 }
