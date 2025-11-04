@@ -4,7 +4,6 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use Illuminate\Database\Eloquent\Casts\Attribute;
 
 class DgWorkSession extends Model
 {
@@ -34,37 +33,22 @@ class DgWorkSession extends Model
     ];
 
     protected $casts = [
-        'check_in'        => 'datetime',
-        'check_out'       => 'datetime',
-        'session_date'    => 'date',
-        'worked_minutes'  => 'integer',
-        'overtime_minutes'=> 'integer',
-        'anomaly_flags'   => 'array', // importantissimo
+        'session_date'     => 'date',
+        'check_in'         => 'datetime',
+        'check_out'        => 'datetime',
+        'approved_at'      => 'datetime',
+        'worked_minutes'   => 'integer',
+        'overtime_minutes' => 'integer',
+        'anomaly_flags'    => 'array',
     ];
 
     /* -------- Relations -------- */
-    public function user()
-    {
-        return $this->belongsTo(User::class);
-    }
+    public function user() { return $this->belongsTo(User::class); }
+    public function site() { return $this->belongsTo(DgSite::class, 'site_id'); }
+    public function resolvedSite() { return $this->belongsTo(DgSite::class, 'resolved_site_id'); }
+    public function punches() { return $this->hasMany(DgPunch::class, 'session_id'); }
 
-    public function site()
-    {
-        return $this->belongsTo(DgSite::class, 'site_id');
-    }
-
-    // FASE 3
-    public function resolvedSite()
-    {
-        return $this->belongsTo(DgSite::class, 'resolved_site_id');
-    }
-
-    public function punches()
-    {
-        return $this->hasMany(DgPunch::class, 'session_id');
-    }
-
-    /* -------- Helpers -------- */
+    /* -------- Computed -------- */
     public function getWorkedHoursAttribute(): float
     {
         return round(($this->worked_minutes ?? 0) / 60, 2);
@@ -81,19 +65,29 @@ class DgWorkSession extends Model
         return sprintf('%02dh %02dm', intdiv($m, 60), $m % 60);
     }
 
-    /* -------- Scopes -------- */
-    public function scopeForUser($query, int $userId)
+    // Questi due li stai usando nel resource come $record->has_anomalies / ->anomaly_summary
+    public function getHasAnomaliesAttribute(): bool
     {
-        return $query->where('user_id', $userId);
+        $flags = $this->anomaly_flags ?? [];
+        return is_array($flags) && !empty($flags);
     }
 
-    public function scopeForSite($query, int $siteId)
+    public function getAnomalySummaryAttribute(): ?string
     {
-        return $query->where('site_id', $siteId);
-    }
+        $flags = $this->anomaly_flags ?? [];
+        if (!is_array($flags) || empty($flags)) return null;
 
-    public function scopeBetweenDates($query, $from, $to)
-    {
-        return $query->whereBetween('session_date', [$from, $to]);
+        // compatto in una stringa “tipo:minuti” se presente
+        $parts = [];
+        foreach ($flags as $flag) {
+            if (is_array($flag)) {
+                $type = $flag['type'] ?? 'anomalia';
+                $min  = isset($flag['minutes']) ? (int) $flag['minutes'] : null;
+                $parts[] = $min !== null ? "{$type}: {$min}m" : $type;
+            } else {
+                $parts[] = (string) $flag;
+            }
+        }
+        return implode(' | ', $parts);
     }
 }
