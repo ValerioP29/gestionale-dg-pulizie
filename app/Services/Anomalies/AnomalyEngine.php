@@ -86,7 +86,7 @@ class AnomalyEngine
 
             // snapshot JSON per UI
             $session->anomaly_flags = $flags;
-            $session->saveQuietly();
+            $session->save();
         });
     }
 

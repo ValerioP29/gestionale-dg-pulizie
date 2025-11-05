@@ -33,6 +33,7 @@ class Kernel extends ConsoleKernel
 
     protected $commands = [
     \App\Console\Commands\GenerateAnomalies::class,
+    \App\Console\Commands\RebuildWorkSessionsCommand::class,
 ];
 
 }

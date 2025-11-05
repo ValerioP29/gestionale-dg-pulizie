@@ -10,7 +10,7 @@ class DgWorkSession extends Model
     use HasFactory;
 
     protected $table = 'dg_work_sessions';
-
+    protected $touches = ['user'];
     protected $fillable = [
         'user_id',
         'site_id',
@@ -90,4 +90,25 @@ class DgWorkSession extends Model
         }
         return implode(' | ', $parts);
     }
+
+    public function markApproved(): void
+    {
+        $this->approval_status = 'approved';
+        $this->approved_at = now();
+        $this->approved_by = auth()->id();
+        $this->anomaly_flags = []; // pulisce anomalie risolte
+        $this->save();
+    }
+
+    public function markRejected(?string $reason = null): void
+    {
+        $this->approval_status = 'rejected';
+        $this->approved_at = now();
+        $this->approved_by = auth()->id();
+        if ($reason) {
+            $this->override_reason = $reason;
+        }
+        $this->save();
+    }
+
 }

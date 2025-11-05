@@ -28,42 +28,31 @@ class GenerateWorkSessions implements ShouldQueue
             ? Carbon::parse($this->date)->toDateString()
             : now()->subDay()->toDateString();
 
+        // Prendo tutti i punch del giorno (usando created_at come fallback)
         $punches = DgPunch::query()
-            ->whereDate('created_at', $targetDate)
+            ->whereDate('created_at', $targetDate) // se usi payload punched_at lato DB, cambia qui
             ->orderBy('created_at')
-            ->get()
-            ->groupBy(['user_id', 'site_id']);
+            ->get();
 
-        foreach ($punches as $userId => $bySite) {
-            foreach ($bySite as $siteId => $records) {
-                $checkIn  = $records->firstWhere('type', 'check_in');
-                $checkOut = $records->reverse()->firstWhere('type', 'check_out');
+        // Raggruppo per utente (il sito lo lasciamo risolvere via SiteResolver)
+        $byUser = $punches->groupBy('user_id');
 
-                $status = 'invalid';
-                $minutes = 0;
+        foreach ($byUser as $userId => $rows) {
+            // Per ogni utente del giorno cerco primo check_in e ultimo check_out
+            $checkIn  = $rows->first(function ($p) { return $p->type === 'check_in'; });
+            $checkOut = $rows->reverse()->first(function ($p) { return $p->type === 'check_out'; });
 
-                if ($checkIn && $checkOut && $checkOut->created_at->gt($checkIn->created_at)) {
-                    $minutes = $checkIn->created_at->diffInMinutes($checkOut->created_at);
-                    $status = 'complete';
-                } elseif ($checkIn && !$checkOut) {
-                    $status = 'incomplete';
-                }
+            $session = DgWorkSession::firstOrNew([
+                'user_id'      => $userId,
+                'session_date' => $targetDate,
+            ]);
 
-                DgWorkSession::updateOrCreate(
-                    [
-                        'user_id'       => $userId,
-                        'site_id'       => $siteId,
-                        'session_date'  => $targetDate,
-                    ],
-                    [
-                        'check_in'       => $checkIn?->created_at,
-                        'check_out'      => $checkOut?->created_at,
-                        'worked_minutes' => $minutes,
-                        'status'         => $status,
-                        'source'         => 'auto',
-                    ]
-                );
-            }
+            $session->site_id   = $session->site_id ?: ($checkIn?->site_id ?? $checkOut?->site_id);
+            $session->check_in  = $checkIn  ? $checkIn->punchInstant()  : null;
+            $session->check_out = $checkOut ? $checkOut->punchInstant() : null;
+
+            // Non impostare worked_minutes / status: ci pensa l’Observer
+            $session->save();
         }
     }
 }

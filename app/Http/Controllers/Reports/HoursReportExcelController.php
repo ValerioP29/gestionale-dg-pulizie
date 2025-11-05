@@ -2,8 +2,8 @@
 
 namespace App\Http\Controllers\Reports;
 
-use App\Models\User;
-use Illuminate\Support\Facades\Auth;
+use App\Models\DgReportCache;
+use Illuminate\Support\Facades\Response;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xls;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -15,13 +15,17 @@ class HoursReportExcelController
         $year  = request('year');
         $month = request('month');
 
-        $users = User::with(['workSessions' => function ($q) use ($year,$month) {
-            $q->whereYear('session_date', $year)
-              ->whereMonth('session_date', $month);
-        }, 'mainSite.client'])
-        ->where('active', true)
-        ->orderBy('last_name')
-        ->get();
+        if (!$year || !$month) {
+            abort(400, 'Parametro mancante: year o month');
+        }
+
+        // Prende SOLO la cache del mese
+        $reports = DgReportCache::query()
+            ->with(['user', 'resolvedSite.client'])
+            ->whereYear('period_start', $year)
+            ->whereMonth('period_start', $month)
+            ->orderBy('user_id')
+            ->get();
 
         $spreadsheet = new Spreadsheet();
         $sheet = $spreadsheet->getActiveSheet();
@@ -41,48 +45,44 @@ class HoursReportExcelController
             $col++;
         }
 
-        // Stile header
-        $sheet->getStyle("A1:R1")->getFont()->setBold(true);
-        $sheet->getStyle("A1:R1")->getFill()->setFillType('solid')->getStartColor()->setRGB('E1E1E1');
-        $sheet->getStyle("A1:R1")->getAlignment()->setHorizontal('center');
-
         // Riga di partenza
         $row = 2;
 
-        foreach ($users as $u) {
-            $main   = $u->mainSite;
-            $client = $main?->client;
+        foreach ($reports as $r) {
+            $usr   = $r->user;
+            $site  = $r->resolvedSite;
+            $cli   = $site?->client;
 
-            $daily = array_fill(1,7,0);
-            $overtime = 0;
-
-            foreach ($u->workSessions as $s) {
-                $day = (int) date('N', strtotime($s->session_date)); // 1-7
-                if ($day >= 1 && $day <= 7) {
-                    $daily[$day] += $s->worked_minutes;
-                }
-                $overtime += $s->overtime_minutes;
-            }
+            // Non servono loop di sessioni: i daily si leggono dalla cache
+            $daily = [
+                $r->anomaly_flags['lun'] ?? '',
+                $r->anomaly_flags['mar'] ?? '',
+                $r->anomaly_flags['mer'] ?? '',
+                $r->anomaly_flags['gio'] ?? '',
+                $r->anomaly_flags['ven'] ?? '',
+                $r->anomaly_flags['sab'] ?? '',
+                $r->anomaly_flags['dom'] ?? '',
+            ];
 
             $data = [
-                $client?->payroll_client_code,
-                $main?->payroll_site_code,
-                $client?->name,
-                $main?->name,
-                $u->payroll_code,
-                $u->last_name,
-                $u->first_name,
-                $u->hired_at,
-                $u->contract_end_at,
-                $u->contract_hours_monthly,
-                round($daily[1]/60,2),
-                round($daily[2]/60,2),
-                round($daily[3]/60,2),
-                round($daily[4]/60,2),
-                round($daily[5]/60,2),
-                round($daily[6]/60,2),
-                round($daily[7]/60,2),
-                round($overtime/60,2),
+                $cli?->payroll_client_code,
+                $site?->payroll_site_code,
+                $cli?->name,
+                $site?->name,
+                $usr?->payroll_code,
+                $usr?->last_name,
+                $usr?->first_name,
+                optional($usr?->hired_at)->format('d/m/Y'),
+                optional($usr?->contract_end_at)->format('d/m/Y'),
+                $usr?->contract_hours_monthly,
+                number_format(($daily[0] ?? 0)/60, 2, ',', ''),
+                number_format(($daily[1] ?? 0)/60, 2, ',', ''),
+                number_format(($daily[2] ?? 0)/60, 2, ',', ''),
+                number_format(($daily[3] ?? 0)/60, 2, ',', ''),
+                number_format(($daily[4] ?? 0)/60, 2, ',', ''),
+                number_format(($daily[5] ?? 0)/60, 2, ',', ''),
+                number_format(($daily[6] ?? 0)/60, 2, ',', ''),
+                number_format(($r->overtime_minutes ?? 0)/60, 2, ',', ''),
             ];
 
             $col = 1;
@@ -99,7 +99,12 @@ class HoursReportExcelController
             $sheet->getColumnDimension($col)->setAutoSize(true);
         }
 
-        // Tabelle bordate
+        // Stile header
+        $sheet->getStyle("A1:R1")->getFont()->setBold(true);
+        $sheet->getStyle("A1:R1")->getAlignment()->setHorizontal('center');
+        $sheet->getStyle("A1:R1")->getFill()->setFillType('solid')->getStartColor()->setRGB('E1E1E1');
+
+        // Bordo tabella
         $range = "A1:R" . ($row-1);
         $sheet->getStyle($range)->getBorders()->getAllBorders()->setBorderStyle('thin');
 

@@ -14,14 +14,11 @@ class DgPunchObserver
 {
     public function creating(DgPunch $punch): void
     {
-        // Normalizza type ed evita valore fuori enum
-        $type = strtolower(trim((string)$punch->type));
-
-        // Accettiamo solo i due valori previsti dal DB
+        // Normalizza type
+        $type = strtolower(trim((string) $punch->type));
         if (!in_array($type, ['check_in', 'check_out'], true)) {
             $type = 'check_in';
         }
-
         $punch->type = $type;
 
         // UUID se manca
@@ -30,75 +27,62 @@ class DgPunchObserver
         }
     }
 
-
     public function created(DgPunch $punch): void
     {
-        // Usa created_at come timestamp timbratura, se non hai punch_at/punched_at
-        $when = $punch->created_at instanceof \DateTimeInterface
-            ? Carbon::parse($punch->created_at)
-            : now();
-
+        $when = $punch->punchInstant();               // robusto a offline
         $sessionDate = $when->toDateString();
 
         DB::transaction(function () use ($punch, $sessionDate, $when) {
-            // Trova/crea sessione del giorno
+            // 1) Trova/crea sessione del giorno (per utente)
             $session = DgWorkSession::firstOrCreate(
                 [
                     'user_id'      => $punch->user_id,
                     'session_date' => $sessionDate,
                 ],
                 [
-                    'site_id'        => $punch->site_id, // seed iniziale
+                    'site_id'        => $punch->site_id,
                     'status'         => 'incomplete',
                     'worked_minutes' => 0,
                     'source'         => $punch->source ?: 'auto',
                 ]
             );
 
-            // Associa il punch alla sessione
+            // 2) Link punch → sessione
             if (!$punch->session_id) {
                 $punch->session_id = $session->id;
-                $punch->saveQuietly();
+                // QUI niente saveQuietly: vogliamo firing eventi se cambi in futuro
+                $punch->save();
             }
 
-            // Se arriva un site_id dal punch e la sessione è vuota, impostalo
+            // 3) Se il punch fornisce site_id e la sessione non ce l'ha, impostalo
             if (!$session->site_id && $punch->site_id) {
                 $session->site_id = $punch->site_id;
             }
 
-            // Applica check-in/check-out
+            // 4) Applica check-in/out usando il timestamp “vero”
             if ($punch->type === 'check_in') {
-                // Usa il primo check-in valido
-                if (is_null($session->check_in) || $when->lt($session->check_in)) {
+                if (is_null($session->check_in) || $when->lt(Carbon::parse($session->check_in))) {
                     $session->check_in = $when;
                 }
-            } else { // out
-                // Usa l'ultimo check-out valido
-                if (is_null($session->check_out) || $when->gt($session->check_out)) {
+            } else { // check_out
+                if (is_null($session->check_out) || $when->gt(Carbon::parse($session->check_out))) {
                     $session->check_out = $when;
                 }
             }
 
-            // Ricalcolo minutes
-            if ($session->check_in && $session->check_out) {
-                // pausa fissa 30' per default; verrà soppiantata dal contratto nel motore anomalie
-                $worked = max(0, $session->check_out->diffInMinutes($session->check_in) - 30);
-                $session->worked_minutes = $worked;
-                $session->status = $worked > 0 ? 'complete' : 'invalid';
-            } else {
-                $session->status = 'incomplete';
+            // 5) Risolvi sito effettivo (come facevi)
+            if ($session->user_id && $session->session_date) {
+                $session->resolved_site_id = SiteResolverService::resolveFor(
+                    $session->user ?? $session->user()->first(),
+                    $session->site_id,
+                    Carbon::parse($session->session_date)
+                );
             }
 
-            // Risolvi cantiere effettivo
-            $session->resolved_site_id = SiteResolverService::resolveFor(
-                $session->user ?? $session->user()->first(),
-                $session->site_id,
-                Carbon::parse($session->session_date)
-            );
+            // 6) Salva con eventi attivi: il WorkSessionObserver calcola status + minutes
+            $session->save();
 
-            $session->saveQuietly();
-
-            // Valuta anomalie per la sessione
+            // 7) Valuta anomalie
             (new AnomalyEngine())->evaluateSession($session);
         });
     }
@@ -109,6 +93,7 @@ class DgPunchObserver
         if ($punch->session_id) {
             $session = $punch->session()->first();
             if ($session) {
+                $session->save(); // trigger observer
                 (new AnomalyEngine())->evaluateSession($session);
             }
         }
@@ -116,30 +101,28 @@ class DgPunchObserver
 
     public function deleted(DgPunch $punch): void
     {
-        // In caso di cancellazione: ricalcola la sessione
-        if ($punch->session_id) {
-            $session = DgWorkSession::find($punch->session_id);
-            if (!$session) return;
+        // Ricalcola dalla collezione residua (coerente con 'check_in'/'check_out')
+        if (!$punch->session_id) return;
 
-            DB::transaction(function () use ($session) {
-                // Rigenera check_in/out dalla collezione residua
-                $ins  = $session->punches()->where('type','in')->orderBy('created_at')->first();
-                $outs = $session->punches()->where('type','out')->orderByDesc('created_at')->first();
+        $session = DgWorkSession::find($punch->session_id);
+        if (!$session) return;
 
-                $session->check_in  = $ins?->created_at;
-                $session->check_out = $outs?->created_at;
+        DB::transaction(function () use ($session) {
+            $in  = $session->punches()
+                ->where('type', 'check_in')
+                ->orderBy('created_at')
+                ->first();
 
-                if ($session->check_in && $session->check_out) {
-                    $session->worked_minutes = max(0, $session->check_out->diffInMinutes($session->check_in) - 30);
-                    $session->status = $session->worked_minutes > 0 ? 'complete' : 'invalid';
-                } else {
-                    $session->worked_minutes = 0;
-                    $session->status = 'incomplete';
-                }
+            $out = $session->punches()
+                ->where('type', 'check_out')
+                ->orderByDesc('created_at')
+                ->first();
 
-                $session->saveQuietly();
-                (new AnomalyEngine())->evaluateSession($session);
-            });
-        }
+            $session->check_in  = $in?->punchInstant();
+            $session->check_out = $out?->punchInstant();
+
+            $session->save(); // observer ricalcola e poi anomalie
+            (new AnomalyEngine())->evaluateSession($session);
+        });
     }
 }

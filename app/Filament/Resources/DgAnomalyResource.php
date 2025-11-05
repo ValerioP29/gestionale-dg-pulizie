@@ -140,23 +140,36 @@ class DgAnomalyResource extends Resource
                     ),
             ])
             ->actions([
-                Tables\Actions\ViewAction::make(),
                 Tables\Actions\Action::make('approva')
                     ->label('Approva')
                     ->icon('heroicon-o-check-circle')
                     ->color('success')
-                    ->requiresConfirmation()
+                    ->form([
+                        Forms\Components\Textarea::make('note_admin')
+                            ->label('Motivazione approvazione (opzionale)')
+                            ->maxLength(500),
+                    ])
                     ->visible(fn ($record) => $record->status === 'open' && auth()->user()->hasAnyRole(['admin','supervisor']))
-                    ->action(fn ($record) => $record->update(['status' => 'approved'])),
-
+                    ->action(function ($record, $data) {
+                        if (!empty($data['note_admin'])) {
+                            $record->note = $data['note_admin'];
+                        }
+                        $record->markApproved();
+                    }),
                 Tables\Actions\Action::make('rifiuta')
                     ->label('Respingi')
                     ->icon('heroicon-o-x-circle')
                     ->color('danger')
-                    ->requiresConfirmation()
+                    ->form([
+                        Forms\Components\Textarea::make('note_admin')
+                            ->label('Motivazione del rifiuto')
+                            ->required(),
+                    ])
                     ->visible(fn ($record) => $record->status === 'open' && auth()->user()->hasAnyRole(['admin','supervisor']))
-                    ->action(fn ($record) => $record->update(['status' => 'rejected'])),
-
+                    ->action(function ($record, $data) {
+                        $record->note = $data['note_admin'];   // salva motivazione
+                        $record->markRejected();               // gestisce status, user, timestamp, session update
+                    }),
                 Tables\Actions\EditAction::make()
                     ->visible(fn () => auth()->user()->hasAnyRole(['admin','supervisor'])),
 
@@ -171,7 +184,7 @@ class DgAnomalyResource extends Resource
                     ->requiresConfirmation()
                     ->action(function ($records) {
                         foreach ($records as $r) {
-                            $r->update(['status' => 'approved']);
+                            $r->markApproved();   // ✅ USA IL METODO NUOVO
                         }
                     })
                     ->visible(fn () => auth()->user()->hasAnyRole(['admin','supervisor'])),
@@ -183,11 +196,11 @@ class DgAnomalyResource extends Resource
                     ->requiresConfirmation()
                     ->action(function ($records) {
                         foreach ($records as $r) {
-                            $r->update(['status' => 'rejected']);
+                            $r->markRejected();   // ✅ USA IL METODO NUOVO
                         }
                     })
                     ->visible(fn () => auth()->user()->hasAnyRole(['admin','supervisor'])),
-            ]);
+                ]);
     }
 
     public static function getPages(): array

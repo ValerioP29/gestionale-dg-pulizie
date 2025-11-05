@@ -17,4 +17,38 @@ class DgAnomaly extends Model
     public function scopeForPeriod($q, $from, $to){ return $q->whereBetween('date', [$from, $to]); }
     public function scopeForUser($q, $userId){ return $q->where('user_id', $userId); }
     public function scopeType($q, $type){ return $q->where('type', $type); }
+
+    public function markApproved(): void
+    {
+        $this->status = 'approved';
+        $this->approved_at = now();
+        $this->approved_by = auth()->id();
+        $this->save();
+
+        if ($this->session) {
+            // sessione resta completa: non toccare status, no flag rosso
+            $flags = $this->session->anomaly_flags ?? [];
+            $filtered = array_filter($flags, fn($f) => $f['type'] !== $this->type);
+            $this->session->anomaly_flags = array_values($filtered);
+            $this->session->save();
+        }
+    }
+
+    public function markRejected(): void
+    {
+        $this->status = 'rejected';
+        $this->rejected_at = now();
+        $this->rejected_by = auth()->id();
+        $this->save();
+
+        if ($this->session) {
+            // se la respingi, la sessione è "sporco non risolto"
+            $s = $this->session;
+            if ($s->status === 'complete') {
+                $s->status = 'incomplete'; // o 'invalid' se vuoi più severo
+            }
+            $s->save();
+        }
+    }
+
 }

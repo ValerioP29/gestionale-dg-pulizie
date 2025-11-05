@@ -54,8 +54,8 @@ class GenerateReportsCache implements ShouldQueue
                 $sessionIds = $records->pluck('id')->all();
 
                 // Aggregati base
-                $workedMinutes   = (int) $records->sum('worked_minutes');
-                $overtimeMinutes = (int) $records->sum('overtime_minutes');
+                $workedMinutes   = max(0, (int) $records->sum('worked_minutes'));
+                $overtimeMinutes = max(0, (int) $records->sum('overtime_minutes'));
                 $workedHours     = round($workedMinutes / 60, 2);
                 $daysPresent     = $records->where('worked_minutes', '>', 0)->count();
 
@@ -84,6 +84,7 @@ class GenerateReportsCache implements ShouldQueue
                     'period_end'   => $end->toDateString(),
                 ],
                 [
+                    'resolved_site_id' => $siteId, // ✅ salva anche il resolved
                     'worked_hours'     => $workedHours,
                     'days_present'     => $daysPresent,
                     'days_absent'      => $absences,

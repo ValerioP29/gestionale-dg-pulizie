@@ -236,10 +236,7 @@ class DgWorkSessionResource extends Resource
                     ->requiresConfirmation()
                     ->action(function ($records) {
                         foreach ($records as $session) {
-                            $session->approval_status = 'approved';
-                            $session->approved_by = auth()->id();
-                            $session->approved_at = now();
-                            $session->saveQuietly();
+                            $session->markApproved();
                         }
                     })
                     ->visible(fn () => auth()->user()->hasAnyRole(['admin','supervisor'])),

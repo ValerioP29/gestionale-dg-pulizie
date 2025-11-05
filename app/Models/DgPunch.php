@@ -4,32 +4,32 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Support\Carbon;
 
 class DgPunch extends Model
 {
     use HasFactory;
 
     protected $table = 'dg_punches';
-
-    // gestiamo manualmente i timestamp
     public $timestamps = false;
 
     protected $fillable = [
         'uuid',
         'user_id',
         'site_id',
-        'session_id',      // FASE 3: collega la timbratura alla sessione
-        'type',            // in / out
+        'session_id',
+        'type',            // 'check_in' | 'check_out'
         'latitude',
         'longitude',
         'accuracy_m',
         'device_id',
         'device_battery',
         'network_type',
-        'source',          // FASE 3: utile se distingui app / import / correzione
-        'payload',         // FASE 3: eventuale JSON con dati extra
+        'source',
+        'payload',
         'created_at',
         'synced_at',
+        'updated_at',
     ];
 
     protected $casts = [
@@ -39,41 +39,27 @@ class DgPunch extends Model
     ];
 
     /* -------- Relations -------- */
-
-    public function user()
-    {
-        return $this->belongsTo(User::class);
-    }
-
-    public function site()
-    {
-        return $this->belongsTo(DgSite::class, 'site_id');
-    }
-
-    public function session()
-    {
-        return $this->belongsTo(DgWorkSession::class, 'session_id');
-    }
+    public function user()        { return $this->belongsTo(User::class); }
+    public function site()        { return $this->belongsTo(DgSite::class, 'site_id'); }
+    public function session()     { return $this->belongsTo(DgWorkSession::class, 'session_id'); }
 
     /* -------- Scopes -------- */
+    public function scopeForUser($q, int $userId) { return $q->where('user_id', $userId); }
+    public function scopeForSite($q, int $siteId) { return $q->where('site_id', $siteId); }
+    public function scopeBetweenDates($q, $from, $to) { return $q->whereBetween('created_at', [$from, $to]); }
+    public function scopeOrdered($q) { return $q->orderBy('created_at'); }
 
-    public function scopeForUser($query, int $userId)
+    /* -------- Helper per offline -------- */
+    public function punchInstant(): Carbon
     {
-        return $query->where('user_id', $userId);
-    }
+        // Se la PWA mette un client_ts o punched_at nel payload, usalo
+        $p = $this->payload ?? [];
+        $candidate = $p['punched_at'] ?? $p['client_ts'] ?? null;
 
-    public function scopeForSite($query, int $siteId)
-    {
-        return $query->where('site_id', $siteId);
-    }
-
-    public function scopeBetweenDates($query, $from, $to)
-    {
-        return $query->whereBetween('created_at', [$from, $to]);
-    }
-
-    public function scopeOrdered($query)
-    {
-        return $query->orderBy('created_at');
+        return $candidate
+            ? Carbon::parse($candidate)
+            : ($this->created_at instanceof \DateTimeInterface
+                ? Carbon::parse($this->created_at)
+                : now());
     }
 }

@@ -55,7 +55,7 @@ class DgReportCacheResource extends Resource
         return $table
             ->columns([
                 Tables\Columns\TextColumn::make('user.name')->sortable()->label('Dipendente'),
-                Tables\Columns\TextColumn::make('site.name')->sortable()->label('Cantiere'),
+                Tables\Columns\TextColumn::make('resolvedSite.name')->sortable()->label('Cantiere'),
                 Tables\Columns\TextColumn::make('period_start')->date()->label('Dal')->sortable(),
                 Tables\Columns\TextColumn::make('period_end')->date()->label('Al')->sortable(),
 
