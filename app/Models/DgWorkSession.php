@@ -4,10 +4,11 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Spatie\Activitylog\Traits\LogsActivity;
 
 class DgWorkSession extends Model
 {
-    use HasFactory;
+    use HasFactory, LogsActivity;
 
     protected $table = 'dg_work_sessions';
     protected $touches = ['user'];
@@ -98,6 +99,11 @@ class DgWorkSession extends Model
         $this->approved_by = auth()->id();
         $this->anomaly_flags = []; // pulisce anomalie risolte
         $this->save();
+
+        activity('Sesioni di lavoro')
+            ->causedBy(auth()->user())
+            ->performedOn($this)
+            ->log('Sessione di lavoro approvata manualmente');
     }
 
     public function markRejected(?string $reason = null): void
@@ -111,4 +117,11 @@ class DgWorkSession extends Model
         $this->save();
     }
 
+    public function getActivitylogOptions(): \Spatie\Activitylog\LogOptions
+    {
+        return \Spatie\Activitylog\LogOptions::defaults()
+            ->logFillable()
+            ->logOnlyDirty()
+            ->useLogName('Sessioni di lavoro');
+    }
 }

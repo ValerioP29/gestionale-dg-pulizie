@@ -11,16 +11,33 @@ class CreateDgPayslip extends CreateRecord
 
     protected function mutateFormDataBeforeCreate(array $data): array
     {
-        if (request()->hasFile('file')) {
-            $file = request()->file('file');
-            $path = $file->store('payslips', $data['storage_disk'] ?? 's3');
-            $data['file_path'] = $path;
-            $data['mime_type'] = $file->getMimeType();
-            $data['file_size'] = $file->getSize();
-            $data['checksum']  = sha1_file($file->getRealPath());
-            $data['uploaded_by'] = auth()->id();
+        $data['uploaded_by'] = auth()->id();
+        $data['uploaded_at'] = now();
+
+        if (isset($data['file_path'])) {
+            $disk = $data['storage_disk'] ?? 'local';
+            $data['mime_type'] = Storage::disk($disk)->mimeType($data['file_path']);
+            $data['file_size'] = Storage::disk($disk)->size($data['file_path']);
+            $data['checksum']  = sha1(Storage::disk($disk)->get($data['file_path']));
         }
 
         return $data;
     }
+
+    protected function afterCreate(): void
+    {
+        $payslip = $this->record;
+
+        activity('buste_paga')
+            ->causedBy(auth()->user())
+            ->performedOn($payslip)
+            ->withProperties([
+                'file'  => $payslip->file_name,
+                'month' => $payslip->period_month,
+                'year'  => $payslip->period_year,
+                'user'  => $payslip->user->full_name,
+            ])
+            ->log('Busta paga caricata');
+    }
+
 }

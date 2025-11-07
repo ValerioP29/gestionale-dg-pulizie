@@ -5,10 +5,11 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Support\Carbon;
+use Spatie\Activitylog\Traits\LogsActivity;
 
 class DgSiteAssignment extends Model
 {
-    use HasFactory;
+    use HasFactory, LogsActivity;
 
     protected $table = 'dg_site_assignments';
 
@@ -67,5 +68,13 @@ class DgSiteAssignment extends Model
 
         return $this->assigned_from->lte($today)
             && ($this->assigned_to === null || $this->assigned_to->gte($today));
+    }
+
+    public function getActivitylogOptions(): \Spatie\Activitylog\LogOptions
+    {
+        return \Spatie\Activitylog\LogOptions::defaults()
+            ->logFillable()
+            ->logOnlyDirty()
+            ->useLogName('Assegnazioni cantieri');
     }
 }

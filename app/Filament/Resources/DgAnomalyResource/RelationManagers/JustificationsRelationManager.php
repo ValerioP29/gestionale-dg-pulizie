@@ -93,23 +93,25 @@ class JustificationsRelationManager extends RelationManager
                     ->color('success')
                     ->requiresConfirmation()
                     ->visible(fn () => auth()->user()->hasAnyRole(['admin','supervisor']))
-                    ->action(fn (DgUserJustification $record) => $record->update([
-                        'status' => 'approved',
-                        'reviewed_by' => auth()->id(),
-                        'reviewed_at' => Carbon::now(),
-                    ])),
+                    ->action(function (DgUserJustification $record) {
+                        $record->markApproved();
+                    }),
 
                 Action::make('respingi')
                     ->label('Respingi')
                     ->icon('heroicon-o-x-circle')
                     ->color('danger')
                     ->requiresConfirmation()
+                    ->form([
+                        Forms\Components\Textarea::make('reason')
+                            ->label('Motivo del rifiuto')
+                            ->required()
+                            ->maxLength(500),
+                    ])
                     ->visible(fn () => auth()->user()->hasAnyRole(['admin','supervisor']))
-                    ->action(fn (DgUserJustification $record) => $record->update([
-                        'status' => 'rejected',
-                        'reviewed_by' => auth()->id(),
-                        'reviewed_at' => Carbon::now(),
-                    ])),
+                    ->action(function (DgUserJustification $record, array $data) {
+                        $record->markRejected($data['reason']);
+                    }),
 
                 Tables\Actions\EditAction::make(),
                 Tables\Actions\DeleteAction::make(),

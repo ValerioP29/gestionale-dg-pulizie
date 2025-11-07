@@ -3,9 +3,12 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Spatie\Activitylog\Traits\LogsActivity;
 
 class DgAnomaly extends Model
 {
+    use LogsActivity;
+
     protected $table = 'dg_anomalies';
     protected $fillable = ['user_id','session_id','date','type','minutes','status','note'];
     protected $casts = ['date' => 'date', 'minutes' => 'integer'];
@@ -32,6 +35,16 @@ class DgAnomaly extends Model
             $this->session->anomaly_flags = array_values($filtered);
             $this->session->save();
         }
+
+        activity('Anomalie')
+            ->causedBy(Auth::user())
+            ->performedOn($this)
+            ->withProperties([
+                'anomaly_id' => $this->id,
+                'status'     => 'approved',
+                'note'       => $this->note,
+            ])
+            ->log('Anomalia approvata');
     }
 
     public function markRejected(): void
@@ -49,6 +62,22 @@ class DgAnomaly extends Model
             }
             $s->save();
         }
+        activity('Anomalie')
+            ->causedBy(Auth::user())
+            ->performedOn($this)
+            ->withProperties([
+                'anomaly_id' => $this->id,
+                'status'     => 'rejected',
+                'reason'     => $motivo,
+            ])
+            ->log('Anomalia respinta');
     }
 
+    public function getActivitylogOptions(): \Spatie\Activitylog\LogOptions
+    {
+        return \Spatie\Activitylog\LogOptions::defaults()
+            ->logFillable()
+            ->logOnlyDirty()
+            ->useLogName('Anomalie');
+    }
 }

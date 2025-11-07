@@ -11,14 +11,11 @@ class EditDgPayslip extends EditRecord
 
     protected function mutateFormDataBeforeSave(array $data): array
     {
-        // Se caricano nuovo file, sovrascrivi
-        if (request()->hasFile('file')) {
-            $file = request()->file('file');
-            $path = $file->store('payslips', $this->record->storage_disk);
-            $data['file_path'] = $path;
-            $data['mime_type'] = $file->getMimeType();
-            $data['file_size'] = $file->getSize();
-            $data['checksum']  = sha1_file($file->getRealPath());
+        if (isset($data['file_path']) && $data['file_path'] !== $this->record->file_path) {
+            $disk = $data['storage_disk'] ?? 'local';
+            $data['mime_type'] = Storage::disk($disk)->mimeType($data['file_path']);
+            $data['file_size'] = Storage::disk($disk)->size($data['file_path']);
+            $data['checksum']  = sha1(Storage::disk($disk)->get($data['file_path']));
         }
 
         return $data;

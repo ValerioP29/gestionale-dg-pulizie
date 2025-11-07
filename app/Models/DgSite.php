@@ -4,10 +4,11 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Spatie\Activitylog\Traits\LogsActivity;
 
 class DgSite extends Model
 {
-    use HasFactory;
+    use HasFactory, LogsActivity;
 
     protected $table = 'dg_sites';
 
@@ -57,7 +58,8 @@ class DgSite extends Model
     protected static function booted()
     {
         static::saving(function ($site) {
-            if ($site->isDirty('address') && !empty($site->address)) {
+            if ($site->isDirty('address') && is_string($site->address) && trim($site->address) !== '') {
+
                 $coords = self::geocodeAddress($site->address);
                 if ($coords) {
                     $site->latitude  = $coords['lat'];
@@ -67,18 +69,24 @@ class DgSite extends Model
         });
     }
 
-    public static function geocodeAddress(string $address): ?array
-    {
-        $apiKey = config('services.google_maps.key');
-        if (!$apiKey) return null;
-
-        $url = "https://maps.googleapis.com/maps/api/geocode/json?address=" . urlencode($address) . "&key=" . $apiKey;
-        $response = @file_get_contents($url);
-        if (!$response) return null;
-
-        $data = json_decode($response, true);
-        return $data['results'][0]['geometry']['location'] ?? null;
+    public static function geocodeAddress($address): ?array
+{
+    // Non è una stringa? non geocodiamo nulla
+    if (!is_string($address) || trim($address) === '') {
+        return null;
     }
+
+    $apiKey = config('services.google_maps.key');
+    if (!$apiKey) return null;
+
+    $url = "https://maps.googleapis.com/maps/api/geocode/json?address=" . urlencode($address) . "&key=" . $apiKey;
+    $response = @file_get_contents($url);
+    if (!$response) return null;
+
+    $data = json_decode($response, true);
+    return $data['results'][0]['geometry']['location'] ?? null;
+}
+
 
     /* -------- Helpers per anomalie -------- */
     public function getHasAnomaliesAttribute(): bool
@@ -92,5 +100,13 @@ class DgSite extends Model
         return collect($this->anomaly_flags)
             ->map(fn ($i) => ($i['type'] ?? '') . ' (' . ($i['minutes'] ?? 0) . ' min)')
             ->join(' | ');
+    }
+
+    public function getActivitylogOptions(): \Spatie\Activitylog\LogOptions
+    {
+        return \Spatie\Activitylog\LogOptions::defaults()
+            ->logFillable()
+            ->logOnlyDirty()
+            ->useLogName('Cantieri');
     }
 }

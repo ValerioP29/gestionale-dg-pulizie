@@ -6,10 +6,9 @@ use App\Models\User;
 use App\Models\DgWorkSession;
 use Carbon\Carbon;
 use Illuminate\Contracts\View\View;
-use Maatwebsite\Excel\Concerns\{FromView, WithStyles, ShouldAutoSize};
-use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
+use Maatwebsite\Excel\Concerns\FromView;
 
-class MonthlyHoursExport implements FromView, WithStyles, ShouldAutoSize
+class MonthlyHoursExport implements FromView
 {
     protected int $year;
     protected int $month;
@@ -30,32 +29,29 @@ class MonthlyHoursExport implements FromView, WithStyles, ShouldAutoSize
             ->orderBy('last_name')
             ->get()
             ->map(function ($u) use ($start, $end) {
-                
                 $sessions = DgWorkSession::where('user_id', $u->id)
                     ->whereBetween('session_date', [$start, $end])
                     ->get();
 
-                $days = [
-                    'lun' => 0,
-                    'mar' => 0,
-                    'mer' => 0,
-                    'gio' => 0,
-                    'ven' => 0,
-                    'sab' => 0,
-                    'dom' => 0,
-                ];
-
+                $giorni = [];
+                $daysInMonth = $start->daysInMonth;
                 $overtime = 0;
+                $total = 0;
 
-                foreach ($sessions as $s) {
-                    $dow = strtolower($s->session_date->isoFormat('ddd')); // lun, mar, mer ecc.
-                    if (isset($days[$dow])) {
-                        $days[$dow] += round(($s->worked_minutes ?? 0) / 60, 2);
+                for ($d = 1; $d <= $daysInMonth; $d++) {
+                    $date = $start->copy()->day($d)->toDateString();
+                    $session = $sessions->firstWhere('session_date', $date);
+
+                    if ($session) {
+                        $h = round(($session->worked_minutes ?? 0) / 60, 2);
+                        $o = round(($session->overtime_minutes ?? 0) / 60, 2);
+                        $giorni[$d] = $h > 0 ? $h : '';
+                        $total += $h;
+                        $overtime += $o;
+                    } else {
+                        $giorni[$d] = '';
                     }
-                    $overtime += round(($s->overtime_minutes ?? 0) / 60, 2);
                 }
-
-                $total = array_sum($days);
 
                 return [
                     'utente'       => $u->full_name,
@@ -66,30 +62,16 @@ class MonthlyHoursExport implements FromView, WithStyles, ShouldAutoSize
                     'cantiere'     => $u->mainSite->name ?? '',
                     'hired_at'     => $u->hired_at?->format('d/m/Y') ?? '',
                     'end_at'       => $u->contract_end_at?->format('d/m/Y') ?? '',
-                    'mon' => $days['lun'],
-                    'tue' => $days['mar'],
-                    'wed' => $days['mer'],
-                    'thu' => $days['gio'],
-                    'fri' => $days['ven'],
-                    'sat' => $days['sab'],
-                    'sun' => $days['dom'],
-                    'total_hours' => $total,
-                    'contract'    => $u->contract_hours_monthly ?? '',
-                    'overtime'    => $overtime,
+                    'giorni'       => $giorni,
+                    'total_hours'  => number_format($total, 2, ',', ''),
+                    'overtime'     => number_format($overtime, 2, ',', ''),
                 ];
             });
 
-        return view('exports.monthly_hours', [
-            'users' => $users,
-            'year'  => $this->year,
+        return view('exports.monthly_hours_matrix', [
+            'rows' => $users,
+            'year' => $this->year,
             'month' => $this->month,
         ]);
-    }
-
-    public function styles(Worksheet $sheet)
-    {
-        return [
-            1 => ['font' => ['bold' => true]],
-        ];
     }
 }

@@ -64,8 +64,9 @@ class DgSiteResource extends Resource
                         ->default('privato')
                         ->required(),
 
-                    Forms\Components\View::make('filament.forms.address-autocomplete')
-                        ->label('Indirizzo'),
+                    Forms\Components\View::make('filament.forms.components.address-autocomplete')
+                        ->label('Indirizzo')
+                        ->reactive(),
 
                     Forms\Components\Hidden::make('address')
                         ->reactive()
