@@ -6,6 +6,7 @@ use Illuminate\Console\Command;
 use Illuminate\Support\CarbonImmutable;
 use Illuminate\Support\Facades\Log;
 use App\Jobs\GenerateReportsCache as GenerateReportsCacheJob;
+use App\Support\ReportsCacheStatus;
 
 class GenerateReportsCache extends Command
 {
@@ -21,6 +22,18 @@ class GenerateReportsCache extends Command
         $end = $start->endOfMonth();
 
         $this->info("📊 Generazione reports_cache da {$start->toDateString()} a {$end->toDateString()}");
+
+        if (ReportsCacheStatus::isRunning()) {
+            $this->warn('⚠️ Rigenerazione già in corso, attendi il completamento prima di riprovare.');
+
+            return;
+        }
+
+        ReportsCacheStatus::markPending([
+            'period_start' => $start->toDateString(),
+            'period_end' => $end->toDateString(),
+            'source' => 'cli',
+        ]);
 
         GenerateReportsCacheJob::dispatchSync(
             $start->toDateString(),

@@ -5,6 +5,9 @@ namespace App\Console;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Console\Kernel as ConsoleKernel;
 use App\Jobs\GenerateReportsCache;
+use App\Support\ReportsCacheStatus;
+use Illuminate\Support\CarbonImmutable;
+use Illuminate\Support\Facades\Log;
 
 class Kernel extends ConsoleKernel
 {
@@ -13,8 +16,33 @@ class Kernel extends ConsoleKernel
         // Genera sessioni giornaliere
         $schedule->command('calculate:sessions')->dailyAt('02:00');
 
-        // Genera report manuale standard (ogni mese consolidato)
-        $schedule->job(new GenerateReportsCache())->monthlyOn(1, '03:00');
+        // Rigenera automaticamente il mese corrente ogni notte
+        $schedule->call(function () {
+            if (ReportsCacheStatus::isRunning()) {
+                Log::info('ReportsCache: esecuzione automatica saltata, job già in corso.');
+
+                return;
+            }
+
+            $now = now();
+            $currentStart = CarbonImmutable::create($now->year, $now->month, 1)->startOfMonth();
+            $currentEnd = $currentStart->endOfMonth();
+
+            if ($now->isSameDay($currentStart)) {
+                $previousStart = $currentStart->subMonth()->startOfMonth();
+                $previousEnd = $previousStart->endOfMonth();
+
+                GenerateReportsCache::dispatchSync(
+                    $previousStart->toDateString(),
+                    $previousEnd->toDateString()
+                );
+            }
+
+            GenerateReportsCache::dispatchSync(
+                $currentStart->toDateString(),
+                $currentEnd->toDateString()
+            );
+        })->dailyAt('03:00');
 
         // Marca i report mensili come "finali" (is_final = true)
         $schedule->call(function () {
