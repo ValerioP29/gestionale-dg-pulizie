@@ -18,9 +18,13 @@ class Kernel extends ConsoleKernel
 
         // Marca i report mensili come "finali" (is_final = true)
         $schedule->call(function () {
+            $anchor = now()->subMonthNoOverflow();
+            $start  = $anchor->copy()->startOfMonth();
+            $end    = $anchor->copy()->endOfMonth();
+
             \App\Models\DgReportCache::whereBetween('period_start', [
-                now()->startOfMonth(),
-                now()->endOfMonth(),
+                $start->toDateString(),
+                $end->toDateString(),
             ])->update(['is_final' => true]);
         })->monthlyOn(1, '03:10');
     }

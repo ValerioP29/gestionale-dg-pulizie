@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Auth;
 use Spatie\Activitylog\Traits\LogsActivity;
 
 class DgAnomaly extends Model
@@ -47,11 +48,14 @@ class DgAnomaly extends Model
             ->log('Anomalia approvata');
     }
 
-    public function markRejected(): void
+    public function markRejected(?string $reason = null): void
     {
         $this->status = 'rejected';
         $this->rejected_at = now();
         $this->rejected_by = auth()->id();
+        if ($reason) {
+            $this->note = $this->note ? ($this->note."\nRifiuto: {$reason}") : $reason;
+        }
         $this->save();
 
         if ($this->session) {
@@ -68,7 +72,7 @@ class DgAnomaly extends Model
             ->withProperties([
                 'anomaly_id' => $this->id,
                 'status'     => 'rejected',
-                'reason'     => $motivo,
+                'reason'     => $reason,
             ])
             ->log('Anomalia respinta');
     }
