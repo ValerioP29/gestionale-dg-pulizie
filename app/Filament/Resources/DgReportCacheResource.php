@@ -186,6 +186,7 @@ class DgReportCacheResource extends Resource
                     ->label('Rigenera mese')
                     ->icon('heroicon-o-arrow-path')
                     ->form(self::getMonthFormSchema())
+
                     ->action(function (array $data) {
                         $year = (int) $data['year'];
                         $month = (int) $data['month'];
@@ -209,7 +210,6 @@ class DgReportCacheResource extends Resource
                             'source' => 'manual',
                         ]);
 
-                        GenerateReportsCacheJob::dispatch(
                             $start->toDateString(),
                             $end->toDateString()
                         );
