@@ -24,14 +24,16 @@ class MonthlyHoursExport implements FromView
         $start = Carbon::create($this->year, $this->month, 1);
         $end   = $start->copy()->endOfMonth();
 
+        $sessions = DgWorkSession::whereBetween('session_date', [$start, $end])
+            ->get()
+            ->groupBy('user_id');
+
         $users = User::employees()
             ->with(['mainSite.client'])
             ->orderBy('last_name')
             ->get()
-            ->map(function ($u) use ($start, $end) {
-                $sessions = DgWorkSession::where('user_id', $u->id)
-                    ->whereBetween('session_date', [$start, $end])
-                    ->get();
+            ->map(function ($u) use ($start, $sessions) {
+                $userSessions = $sessions->get($u->id, collect())->keyBy('session_date');
 
                 $giorni = [];
                 $daysInMonth = $start->daysInMonth;
@@ -40,7 +42,7 @@ class MonthlyHoursExport implements FromView
 
                 for ($d = 1; $d <= $daysInMonth; $d++) {
                     $date = $start->copy()->day($d)->toDateString();
-                    $session = $sessions->firstWhere('session_date', $date);
+                    $session = $userSessions->get($date);
 
                     if ($session) {
                         $h = round(($session->worked_minutes ?? 0) / 60, 2);

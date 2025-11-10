@@ -32,15 +32,15 @@ class RebuildWorkSessions implements ShouldQueue
         if ($this->date) {
             $targetDate = Carbon::parse($this->date)->toDateString();
 
-            $punches = DgPunch::query()
+            $grouped = DgPunch::query()
                 ->whereDate('created_at', $targetDate)
                 ->orderBy('created_at')
                 ->get()
                 ->groupBy(['user_id', 'site_id']);
 
-            foreach ($punches as $userId => $bySite) {
+            foreach ($grouped as $userId => $bySite) {
                 foreach ($bySite as $siteId => $records) {
-                    $session = $this->rebuildSession($userId, $siteId, $records, $engine);
+                    $this->rebuildSession($userId, $siteId, $records, $engine);
                     $count++;
                 }
             }
@@ -58,15 +58,15 @@ class RebuildWorkSessions implements ShouldQueue
             ->pluck('d');
 
         foreach ($dates as $date) {
-            $punches = DgPunch::query()
+            $grouped = DgPunch::query()
                 ->whereDate('created_at', $date)
                 ->orderBy('created_at')
                 ->get()
                 ->groupBy(['user_id', 'site_id']);
 
-            foreach ($punches as $userId => $bySite) {
+            foreach ($grouped as $userId => $bySite) {
                 foreach ($bySite as $siteId => $records) {
-                    $session = $this->rebuildSession($userId, $siteId, $records, $engine);
+                    $this->rebuildSession($userId, $siteId, $records, $engine);
                     $count++;
                 }
             }
@@ -78,28 +78,38 @@ class RebuildWorkSessions implements ShouldQueue
     // ✅ estrai la logica qui
     private function rebuildSession($userId, $siteId, $records, $engine)
     {
-        $checkIn  = $records->firstWhere('type', 'check_in');
-        $checkOut = $records->reverse()->firstWhere('type', 'check_out');
+        $ordered = $records->sortBy(fn (DgPunch $p) => $p->punchInstant()->getTimestamp())->values();
+
+        $checkIn  = $ordered->firstWhere('type', 'check_in')?->punchInstant();
+        $checkOut = $ordered->reverse()->firstWhere('type', 'check_out')?->punchInstant();
 
         $worked = 0;
         $status = 'incomplete';
 
-        if ($checkIn && $checkOut && $checkOut->created_at->gt($checkIn->created_at)) {
-            $worked = $checkOut->created_at->diffInMinutes($checkIn->created_at) - 30;
+        if ($checkIn && $checkOut) {
+            if ($checkOut->lessThan($checkIn)) {
+                $checkOut = $checkOut->copy()->addDay();
+            }
+
+            $worked = max(0, intdiv($checkOut->getTimestamp() - $checkIn->getTimestamp(), 60));
             $status = $worked > 0 ? 'complete' : 'invalid';
+        } elseif (!$checkIn && !$checkOut) {
+            $status = 'invalid';
         }
+
+        $sessionDate = $checkIn?->toDateString()
+            ?? $checkOut?->toDateString()
+            ?? now()->toDateString();
 
         $session = DgWorkSession::updateOrCreate(
             [
                 'user_id'      => $userId,
-                'session_date' => $checkIn?->created_at?->toDateString()
-                    ?? $checkOut?->created_at?->toDateString()
-                    ?? now()->toDateString(),
+                'session_date' => $sessionDate,
+                'site_id'      => $siteId,
             ],
             [
-                'site_id'        => $siteId,
-                'check_in'       => $checkIn?->created_at,
-                'check_out'      => $checkOut?->created_at,
+                'check_in'       => $checkIn,
+                'check_out'      => $checkOut,
                 'worked_minutes' => max(0, $worked),
                 'status'         => $status,
                 'source'         => 'rebuild',
