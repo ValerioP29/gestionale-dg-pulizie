@@ -35,15 +35,23 @@ class DgSiteResource extends Resource
 
                     Forms\Components\Select::make('client_id')
                         ->label('Cliente')
-                        ->options(DgClient::orderBy('name')->pluck('name', 'id'))
+                        ->relationship('client', 'name')
                         ->searchable()
+                        ->preload()
+                        ->createOptionForm([
+                            Forms\Components\TextInput::make('name')
+                                ->label('Nome cliente')
+                                ->required(),
+                            Forms\Components\TextInput::make('payroll_client_code')
+                                ->label('Codice cliente raggruppato')
+                                ->maxLength(32),
+                        ])
                         ->reactive()
                         ->afterStateUpdated(function ($state, callable $set) {
                             if ($state && $client = DgClient::find($state)) {
                                 $set('payroll_client_code_display', $client->payroll_client_code);
                             }
-                        })
-                        ->nullable(),
+                        }),
 
                     Forms\Components\TextInput::make('payroll_site_code')
                         ->label('Codice cliente (cantiere)')
@@ -69,24 +77,24 @@ class DgSiteResource extends Resource
                         ->reactive(),
 
                     Forms\Components\Hidden::make('address')
-                        ->reactive()
-                        ->dehydrated(true),
+                        ->required(),
 
                     Forms\Components\Hidden::make('latitude')
-                        ->reactive()
-                        ->dehydrated(true),
+                        ->required()
+                        ->rule('numeric'),
 
                     Forms\Components\Hidden::make('longitude')
-                        ->reactive()
-                        ->dehydrated(true),
+                        ->required()
+                        ->rule('numeric'),
 
                     Forms\Components\TextInput::make('radius_m')
                         ->label('Raggio operativo (m)')
                         ->numeric()
-                        ->default(250)
+                        ->default(500)
                         ->minValue(50)
                         ->suffix('metri')
-                        ->helperText('Controllo geofence su timbratura'),
+                        ->helperText('Controllo geofence su timbratura')
+                        ->required(),
 
                     Forms\Components\Toggle::make('active')
                         ->label('Attivo')
@@ -142,7 +150,9 @@ class DgSiteResource extends Resource
             ->filters([
                 SelectFilter::make('client_id')
                     ->label('Cliente')
-                    ->options(DgClient::orderBy('name')->pluck('name','id')),
+                    ->relationship('client', 'name')
+                    ->searchable()
+                    ->preload(),
 
                 SelectFilter::make('type')
                     ->label('Tipo cantiere')

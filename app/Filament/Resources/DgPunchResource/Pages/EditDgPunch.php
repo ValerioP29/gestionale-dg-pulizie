@@ -8,4 +8,10 @@ use Filament\Resources\Pages\EditRecord;
 class EditDgPunch extends EditRecord
 {
     protected static string $resource = DgPunchResource::class;
+
+    protected function getRedirectUrl(): string
+{
+    return $this->getResource()::getUrl('index');
+}
+
 }

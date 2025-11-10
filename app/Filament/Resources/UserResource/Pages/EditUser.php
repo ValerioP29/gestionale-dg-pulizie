@@ -5,7 +5,6 @@ namespace App\Filament\Resources\UserResource\Pages;
 use App\Filament\Resources\UserResource;
 use Filament\Resources\Pages\EditRecord;
 use Filament\Forms;
-use Filament\Forms\Components\Actions\Action;
 use App\Models\DgWorkSession;
 use App\Models\DgAnomaly;
 use App\Models\DgJobTitle;
@@ -57,11 +56,9 @@ class EditUser extends EditRecord
                 ->columnSpanFull()
                 ->tabs([
 
-                    /** DATI UTENTE */
                     Forms\Components\Tabs\Tab::make('Dati Utente')
                         ->schema(UserResource::getFormSchema()),
 
-                    /** RIEPILOGO */
                     Forms\Components\Tabs\Tab::make('Riepilogo Mensile')
                         ->schema([
                             Forms\Components\Placeholder::make('worked_hours')
@@ -78,7 +75,6 @@ class EditUser extends EditRecord
                         ])
                         ->columns(2),
 
-                    /** MANSIONE */
                     Forms\Components\Tabs\Tab::make('Mansione')
                         ->schema([
                             Forms\Components\Select::make('job_title_id')
@@ -98,7 +94,6 @@ class EditUser extends EditRecord
                                 ]),
                         ]),
 
-                    /** CONTRATTO (direttamente sull’utente) */
                     Forms\Components\Tabs\Tab::make('Contratto Orario')
                         ->schema([
                             Forms\Components\Grid::make(7)->schema([
@@ -118,11 +113,6 @@ class EditUser extends EditRecord
                                         ? $record->contract_hours_monthly.' h'
                                         : '—'
                                 ),
-
-                            Forms\Components\KeyValue::make('rules')
-                                ->label('Regole avanzate (opzionali)')
-                                ->helperText('Esempio: {"start":"08:00","end":"12:00","break":0}')
-                                ->nullable(),
                         ]),
                 ]),
         ]);

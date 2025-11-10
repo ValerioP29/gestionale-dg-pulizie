@@ -29,61 +29,50 @@ class DgPunchObserver
 
     public function created(DgPunch $punch): void
     {
-        $when = $punch->punchInstant();               // robusto a offline
-        $sessionDate = $when->toDateString();
+        \DB::afterCommit(function () use ($punch) {
 
-        DB::transaction(function () use ($punch, $sessionDate, $when) {
-            // 1) Trova/crea sessione del giorno (per utente)
-            $session = DgWorkSession::firstOrCreate(
-                [
-                    'user_id'      => $punch->user_id,
-                    'session_date' => $sessionDate,
-                ],
-                [
-                    'site_id'        => $punch->site_id,
-                    'status'         => 'incomplete',
-                    'worked_minutes' => 0,
-                    'source'         => $punch->source ?: 'auto',
-                ]
-            );
+            $p = DgPunch::find($punch->id);
+            if (!$p) return;
 
-            // 2) Link punch → sessione
-            if (!$punch->session_id) {
-                $punch->session_id = $session->id;
-                // QUI niente saveQuietly: vogliamo firing eventi se cambi in futuro
-                $punch->save();
-            }
+            $when = $p->punchInstant();
+            $sessionDate = $when->toDateString();
 
-            // 3) Se il punch fornisce site_id e la sessione non ce l'ha, impostalo
-            if (!$session->site_id && $punch->site_id) {
-                $session->site_id = $punch->site_id;
-            }
+            \DB::transaction(function () use ($p, $when, $sessionDate) {
 
-            // 4) Applica check-in/out usando il timestamp “vero”
-            if ($punch->type === 'check_in') {
-                if (is_null($session->check_in) || $when->lt(Carbon::parse($session->check_in))) {
-                    $session->check_in = $when;
-                }
-            } else { // check_out
-                if (is_null($session->check_out) || $when->gt(Carbon::parse($session->check_out))) {
-                    $session->check_out = $when;
-                }
-            }
-
-            // 5) Risolvi sito effettivo (come facevi)
-            if ($session->user_id && $session->session_date) {
-                $session->resolved_site_id = SiteResolverService::resolveFor(
-                    $session->user ?? $session->user()->first(),
-                    $session->site_id,
-                    Carbon::parse($session->session_date)
+                $session = DgWorkSession::firstOrCreate(
+                    [
+                        'user_id'      => $p->user_id,
+                        'session_date' => $sessionDate,
+                    ],
+                    [
+                        'site_id'        => $p->site_id,
+                        'status'         => 'incomplete',
+                        'worked_minutes' => 0,
+                        'source'         => $p->source ?: 'auto',
+                    ]
                 );
-            }
 
-            // 6) Salva con eventi attivi: il WorkSessionObserver calcola status + minutes
-            $session->save();
+                // Link punch → sessione SENZA eventi
+                DgPunch::withoutEvents(function () use ($p, $session) {
+                    if (!$p->session_id) {
+                        $p->update(['session_id' => $session->id]);
+                    }
+                });
 
-            // 7) Valuta anomalie
-            (new AnomalyEngine())->evaluateSession($session);
+                // Check-in / Check-out
+                if ($p->type === 'check_in') {
+                    if (is_null($session->check_in) || $when->lt($session->check_in)) {
+                        $session->check_in = $when;
+                    }
+                } else {
+                    if (is_null($session->check_out) || $when->gt($session->check_out)) {
+                        $session->check_out = $when;
+                    }
+                }
+
+                $session->save(); 
+                (new AnomalyEngine())->evaluateSession($session);
+            });
         });
     }
 

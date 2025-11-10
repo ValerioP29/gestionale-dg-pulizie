@@ -4,14 +4,11 @@ namespace App\Filament\Resources;
 
 use App\Filament\Resources\DgPunchResource\Pages;
 use App\Models\DgPunch;
-use App\Models\User;
-use App\Models\DgSite;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Filament\Resources\Resource;
-use Illuminate\Database\Eloquent\Builder;
 
 class DgPunchResource extends Resource
 {
@@ -25,16 +22,19 @@ class DgPunchResource extends Resource
     public static function form(Form $form): Form
     {
         return $form->schema([
+
             Forms\Components\Select::make('user_id')
                 ->label('Dipendente')
-                ->options(User::orderBy('name')->pluck('name', 'id'))
+                ->relationship('user', 'name')
                 ->searchable()
+                ->preload()
                 ->required(),
 
             Forms\Components\Select::make('site_id')
                 ->label('Cantiere')
-                ->options(DgSite::orderBy('name')->pluck('name', 'id'))
+                ->relationship('site', 'name')
                 ->searchable()
+                ->preload()
                 ->required(),
 
             Forms\Components\Select::make('type')
@@ -45,22 +45,45 @@ class DgPunchResource extends Resource
                 ])
                 ->required(),
 
-            Forms\Components\TextInput::make('latitude')->numeric()->label('Latitudine')->disabled(),
-            Forms\Components\TextInput::make('longitude')->numeric()->label('Longitudine')->disabled(),
-            Forms\Components\TextInput::make('accuracy_m')->numeric()->label('Precisione (m)')->disabled(),
+            // ✅ punch_time al posto di created_at per evitare loop
+            Forms\Components\DateTimePicker::make('punch_time')
+                ->label('Data e ora timbratura')
+                ->default(now())
+                ->required()
+                ->withoutSeconds()
+                ->dehydrated(true),   // <<–– questa riga salva la vita
 
-            Forms\Components\TextInput::make('device_id')->label('Dispositivo')->disabled(),
-            Forms\Components\TextInput::make('device_battery')->label('Batteria (%)')->disabled(),
-            Forms\Components\TextInput::make('network_type')->label('Connessione')->disabled(),
+            // ✅ Campi solo visuali
+            Forms\Components\TextInput::make('latitude')
+                ->label('Latitudine')
+                ->disabled()
+                ->dehydrated(false),
 
-            Forms\Components\DateTimePicker::make('created_at')
-                ->label('Ora timbratura')
-                ->required(),
+            Forms\Components\TextInput::make('longitude')
+                ->label('Longitudine')
+                ->disabled()
+                ->dehydrated(false),
 
-            Forms\Components\DateTimePicker::make('synced_at')
-                ->label('Sincronizzato il')
-                ->nullable()
-                ->disabled(),
+            Forms\Components\TextInput::make('accuracy_m')
+                ->label('Precisione (m)')
+                ->disabled()
+                ->dehydrated(false),
+
+            Forms\Components\TextInput::make('device_id')
+                ->label('Dispositivo')
+                ->disabled()
+                ->dehydrated(false),
+
+            Forms\Components\TextInput::make('device_battery')
+                ->label('Batteria (%)')
+                ->disabled()
+                ->dehydrated(false),
+
+            Forms\Components\TextInput::make('network_type')
+                ->label('Connessione')
+                ->disabled()
+                ->dehydrated(false),
+
         ])->columns(2);
     }
 
@@ -68,32 +91,33 @@ class DgPunchResource extends Resource
     {
         return $table
             ->columns([
-                Tables\Columns\TextColumn::make('user.name')->label('Dipendente')->sortable()->searchable(),
-                Tables\Columns\TextColumn::make('site.name')->label('Cantiere')->sortable()->searchable(),
+                Tables\Columns\TextColumn::make('user.name')
+                    ->label('Dipendente')
+                    ->sortable()
+                    ->searchable(),
+
+                Tables\Columns\TextColumn::make('site.name')
+                    ->label('Cantiere')
+                    ->sortable()
+                    ->searchable(),
+
                 Tables\Columns\BadgeColumn::make('type')
                     ->label('Tipo')
                     ->colors([
                         'success' => 'check_in',
                         'danger'  => 'check_out',
                     ])
-                    ->formatStateUsing(fn (string $state) => $state === 'check_in' ? 'Entrata' : 'Uscita'),
+                    ->formatStateUsing(fn ($state) =>
+                        $state === 'check_in' ? 'Entrata' : 'Uscita'
+                    ),
 
                 Tables\Columns\TextColumn::make('created_at')
                     ->label('Ora timbratura')
                     ->dateTime('d/m/Y H:i')
                     ->sortable(),
 
-                Tables\Columns\TextColumn::make('latitude')
-                    ->label('Latitudine')
-                    ->toggleable(isToggledHiddenByDefault: true),
-
-                Tables\Columns\TextColumn::make('longitude')
-                    ->label('Longitudine')
-                    ->toggleable(isToggledHiddenByDefault: true),
-
                 Tables\Columns\TextColumn::make('network_type')
                     ->label('Rete')
-                    ->sortable()
                     ->toggleable(isToggledHiddenByDefault: true),
 
                 Tables\Columns\TextColumn::make('synced_at')
@@ -101,34 +125,21 @@ class DgPunchResource extends Resource
                     ->dateTime('d/m/Y H:i')
                     ->sortable(),
             ])
-            ->filters([
-                Tables\Filters\SelectFilter::make('type')
-                    ->label('Tipo')
-                    ->options([
-                        'check_in' => 'Entrata',
-                        'check_out' => 'Uscita',
-                    ]),
-                Tables\Filters\Filter::make('date_range')
-                    ->form([
-                        Forms\Components\DatePicker::make('from')->label('Dal'),
-                        Forms\Components\DatePicker::make('to')->label('Al'),
-                    ])
-                    ->query(function (Builder $query, array $data): Builder {
-                        return $query
-                            ->when($data['from'], fn ($q, $date) => $q->whereDate('created_at', '>=', $date))
-                            ->when($data['to'], fn ($q, $date) => $q->whereDate('created_at', '<=', $date));
-                    }),
-            ])
             ->defaultSort('created_at', 'desc')
             ->actions([
-                Tables\Actions\EditAction::make()->visible(fn ($record) => auth()->user()->hasAnyRole(['admin', 'supervisor'])),
-                Tables\Actions\DeleteAction::make()->visible(fn ($record) => auth()->user()->isRole('admin')),
+                Tables\Actions\EditAction::make()
+                    ->visible(fn () => auth()->user()->hasAnyRole(['admin','supervisor'])),
+
+                Tables\Actions\DeleteAction::make()
+                    ->visible(fn () => auth()->user()->isRole('admin')),
             ])
             ->headerActions([
-                Tables\Actions\CreateAction::make()->visible(fn () => auth()->user()->isRole('admin')),
+                Tables\Actions\CreateAction::make()
+                    ->visible(fn () => auth()->user()->isRole('admin')),
             ])
             ->bulkActions([
-                Tables\Actions\DeleteBulkAction::make()->visible(fn () => auth()->user()->isRole('admin')),
+                Tables\Actions\DeleteBulkAction::make()
+                    ->visible(fn () => auth()->user()->isRole('admin')),
             ]);
     }
 

@@ -6,6 +6,7 @@ use App\Filament\Resources\UserResource\Pages;
 use App\Models\User;
 use App\Models\DgSite;
 use App\Models\DgContractSchedule;
+use App\Models\DgJobTitle;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -126,8 +127,8 @@ class UserResource extends Resource
                     Forms\Components\TextInput::make('email')
                         ->label('Email')
                         ->email()
-                        ->unique(ignoreRecord: true)
-                        ->required(),
+                        ->unique(ignoreRecord: true) // niente required
+                        ->nullable(), // permette vuoto
 
                     Forms\Components\TextInput::make('phone')
                         ->label('Telefono')
@@ -148,8 +149,18 @@ class UserResource extends Resource
                         ])
                         ->required(),
 
+                    Forms\Components\Select::make('job_title_id')
+                        ->label('Mansione')
+                        ->relationship('jobTitle', 'name')
+                        ->searchable()
+                        ->preload(),   // questo carica tutti i valori e permette dropdown pieno
+
                     Forms\Components\Toggle::make('active')
                         ->label('Attivo')
+                        ->default(true),
+
+                    Forms\Components\Toggle::make('can_login')
+                        ->label('Può accedere')
                         ->default(true),
                 ])
                 ->columns(3),
@@ -164,29 +175,32 @@ class UserResource extends Resource
                         ->nullable()
                         ->rule('after_or_equal:hired_at'),
 
-                    Forms\Components\Select::make('contract_schedule_id')
-                        ->label('Contratto orario')
-                        ->options(
-                            DgContractSchedule::where('active', true)
-                                ->orderBy('name')
-                                ->pluck('name', 'id')
-                        )
-                        ->searchable()
-                        ->placeholder('Seleziona contratto')
-                        ->helperText('Se selezioni un contratto, verrà usato come base. Se modifichi i giorni sotto, sovrascrive i valori.'),
-
                     Forms\Components\TextInput::make('payroll_code')
                         ->label('Matricola')
                         ->maxLength(64),
                 ])
                 ->columns(2),
 
+            Forms\Components\Section::make('Orario Settimanale')
+                ->schema([
+                    Forms\Components\TextInput::make('mon')->numeric()->default(0)->label('Lunedì'),
+                    Forms\Components\TextInput::make('tue')->numeric()->default(0)->label('Martedì'),
+                    Forms\Components\TextInput::make('wed')->numeric()->default(0)->label('Mercoledì'),
+                    Forms\Components\TextInput::make('thu')->numeric()->default(0)->label('Giovedì'),
+                    Forms\Components\TextInput::make('fri')->numeric()->default(0)->label('Venerdì'),
+                    Forms\Components\TextInput::make('sat')->numeric()->default(0)->label('Sabato'),
+                    Forms\Components\TextInput::make('sun')->numeric()->default(0)->label('Domenica'),
+
+                ])
+                ->columns(4),
+
             Forms\Components\Section::make('Cantiere principale')
                 ->schema([
-                    Forms\Components\Select::make('main_site_id')
-                        ->label('Cantiere principale')
-                        ->relationship('mainSite', 'name')
-                        ->searchable(),
+                   Forms\Components\Select::make('main_site_id')
+                    ->label('Cantiere principale')
+                    ->relationship('mainSite', 'name')
+                    ->searchable()
+                    ->preload(),
                 ]),
 
             Forms\Components\Section::make('Sicurezza')
@@ -218,9 +232,9 @@ class UserResource extends Resource
     }
 
     public static function getRelations(): array
-        {
-            return [
-                \App\Filament\Resources\UserResource\RelationManagers\AssignmentsRelationManager::class,
-            ];
-        }
+    {
+        return [
+            \App\Filament\Resources\UserResource\RelationManagers\AssignmentsRelationManager::class,
+        ];
+    }
 }

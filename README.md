@@ -64,7 +64,7 @@ SPA (Vue) e Filament condividono Sanctum come sistema di sessione.
 
 API base (routes/api.php) gestisce login/logout/me.
 
-Ruoli gestiti con Spatie Permission.
+Ruoli gestiti con Policies.
 
 Esempio rapido login da frontend (Axios):
 
