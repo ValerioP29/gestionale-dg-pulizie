@@ -67,15 +67,18 @@ class DgPunchObserver
                     ]);
                 }
 
-                if ($session->site_id !== $sessionSiteId) {
-                    $session->site_id = $sessionSiteId;
+                $session->site_id = $sessionSiteId;
+
+                if (!$session->exists) {
+                    $session->save();
                 }
 
                 // Link punch → sessione SENZA eventi
-                DgPunch::withoutEvents(function () use ($p, $session) {
-                    if (!$p->session_id) {
-                        $p->update(['session_id' => $session->id]);
-                    }
+                DgPunch::withoutEvents(function () use ($p, $session, $when) {
+                    $p->forceFill([
+                        'session_id' => $session->id,
+                        'created_at' => $when,
+                    ])->save();
                 });
 
                 // Check-in / Check-out

@@ -4,6 +4,8 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Http\Client\ConnectionException;
+use Illuminate\Support\Facades\Http;
 use Spatie\Activitylog\Traits\LogsActivity;
 
 class DgSite extends Model
@@ -70,22 +72,56 @@ class DgSite extends Model
     }
 
     public static function geocodeAddress($address): ?array
-{
-    // Non è una stringa? non geocodiamo nulla
-    if (!is_string($address) || trim($address) === '') {
-        return null;
+    {
+        if (!is_string($address) || trim($address) === '') {
+            return null;
+        }
+
+        $apiKey = config('services.google_maps.key');
+
+        if (!$apiKey) {
+            return null;
+        }
+
+        try {
+            $response = Http::timeout(5)
+                ->retry(2, 200)
+                ->get('https://maps.googleapis.com/maps/api/geocode/json', [
+                    'address' => $address,
+                    'key'     => $apiKey,
+                ]);
+        } catch (ConnectionException $e) {
+            logger()->warning('Geocode connection failure', [
+                'address' => $address,
+                'error'   => $e->getMessage(),
+            ]);
+
+            return null;
+        }
+
+        if ($response->failed()) {
+            logger()->warning('Geocode failed', [
+                'address' => $address,
+                'status'  => $response->status(),
+                'body'    => config('app.debug') ? $response->body() : null,
+            ]);
+
+            return null;
+        }
+
+        $data = $response->json();
+
+        if (!is_array($data) || ($data['status'] ?? null) !== 'OK') {
+            logger()->warning('Geocode unexpected payload', [
+                'address' => $address,
+                'payload' => config('app.debug') ? $data : null,
+            ]);
+
+            return null;
+        }
+
+        return $data['results'][0]['geometry']['location'] ?? null;
     }
-
-    $apiKey = config('services.google_maps.key');
-    if (!$apiKey) return null;
-
-    $url = "https://maps.googleapis.com/maps/api/geocode/json?address=" . urlencode($address) . "&key=" . $apiKey;
-    $response = @file_get_contents($url);
-    if (!$response) return null;
-
-    $data = json_decode($response, true);
-    return $data['results'][0]['geometry']['location'] ?? null;
-}
 
 
     /* -------- Helpers per anomalie -------- */

@@ -32,8 +32,6 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('users', function (Blueprint $t) {
-            $t->dropIndex(['role']);
-            $t->dropIndex(['role', 'active']);
             $t->dropConstrainedForeignId('main_site_id');
             $t->dropConstrainedForeignId('contract_schedule_id');
             $t->dropColumn('payroll_code');

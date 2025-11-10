@@ -37,7 +37,6 @@ class GenerateWorkSessions implements ShouldQueue
             ->orderBy('created_at')
             ->get();
 
-        // Raggruppo per utente (il sito lo lasciamo risolvere via SiteResolver)
         $byUser = $punches->groupBy('user_id');
 
         foreach ($byUser as $userId => $rows) {
@@ -46,56 +45,52 @@ class GenerateWorkSessions implements ShouldQueue
                 continue;
             }
 
-            $bySite = $rows->groupBy(function (DgPunch $p) use ($user, $targetDate) {
-                $resolved = SiteResolverService::resolveFor(
-                    $user,
-                    $p->site_id,
-                    $targetDate->copy()
-                );
+            $byDate = $rows->groupBy(fn (DgPunch $p) => $p->punchInstant()->toDateString());
 
-                return $resolved ?? 'null';
-            });
-
-            foreach ($bySite as $siteKey => $records) {
-                $siteId = $siteKey === 'null' ? null : (int) $siteKey;
-
-                $checkIn = $records->first(function ($p) {
-                    return $p->type === 'check_in';
-                });
-
-                $checkOut = $records->reverse()->first(function ($p) {
-                    return $p->type === 'check_out';
-                });
-
-                $session = DgWorkSession::where('user_id', $userId)
-                    ->whereDate('session_date', $targetDate->toDateString())
-                    ->where(function ($q) use ($siteId) {
-                        if (is_null($siteId)) {
-                            $q->whereNull('site_id');
-                        } else {
-                            $q->where('site_id', $siteId);
-                        }
-                    })
-                    ->first();
-
-                if (!$session) {
-                    $session = new DgWorkSession([
-                        'user_id'        => $userId,
-                        'session_date'   => $targetDate->toDateString(),
-                        'site_id'        => $siteId,
-                        'status'         => 'incomplete',
-                        'worked_minutes' => 0,
-                        'source'         => 'auto',
-                    ]);
-                } elseif ($session->site_id !== $siteId) {
-                    $session->site_id = $siteId;
+            foreach ($byDate as $sessionDate => $datedPunches) {
+                if ($sessionDate !== $targetDate->toDateString()) {
+                    continue;
                 }
 
-                $session->check_in  = $checkIn  ? $checkIn->punchInstant()  : null;
-                $session->check_out = $checkOut ? $checkOut->punchInstant() : null;
+                $bySite = $datedPunches->groupBy(function (DgPunch $p) use ($user) {
+                    $instant = $p->punchInstant();
 
-                // Non impostare worked_minutes / status: ci pensa l’Observer
-                $session->save();
+                    $resolved = SiteResolverService::resolveFor(
+                        $user,
+                        $p->site_id,
+                        $instant
+                    );
+
+                    return $resolved ?? 'null';
+                });
+
+                foreach ($bySite as $siteKey => $records) {
+                    $siteId = $siteKey === 'null' ? null : (int) $siteKey;
+
+                    $ordered = $records->sortBy(fn (DgPunch $p) => $p->punchInstant()->getTimestamp())->values();
+
+                    $checkInPunch = $ordered->firstWhere('type', 'check_in');
+                    $checkOutPunch = $ordered->reverse()->firstWhere('type', 'check_out');
+
+                    $session = DgWorkSession::firstOrNew([
+                        'user_id'      => $userId,
+                        'session_date' => $sessionDate,
+                        'site_id'      => $siteId,
+                    ]);
+
+                    if (!$session->exists) {
+                        $session->fill([
+                            'status'         => 'incomplete',
+                            'worked_minutes' => 0,
+                            'source'         => 'auto',
+                        ]);
+                    }
+
+                    $session->check_in  = $checkInPunch?->punchInstant();
+                    $session->check_out = $checkOutPunch?->punchInstant();
+
+                    $session->save();
+                }
             }
         }
 

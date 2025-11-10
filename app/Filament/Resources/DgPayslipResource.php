@@ -13,6 +13,7 @@ use Filament\Tables\Table;
 use Filament\Tables\Actions\Action;
 use Illuminate\Support\Facades\Storage;
 use Filament\Notifications\Notification;
+use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
 use ZipArchive;
 
 class DgPayslipResource extends Resource
@@ -23,9 +24,6 @@ class DgPayslipResource extends Resource
     protected static ?string $modelLabel = 'Busta paga';
     protected static ?string $pluralModelLabel = 'Buste paga';
     protected static ?int $navigationSort = 60;
-
-    // ✅ serve per la modale "fixError"
-    public array $form = [];
 
     public static function table(Table $table): Table
     {
@@ -107,21 +105,30 @@ class DgPayslipResource extends Resource
                     ])
                     ->action(function ($data) {
                         $disk = config('filesystems.default');
-                        $file = $data['file'];
+                        $uploadedFile = $data['file'];
 
-                        $filename = $file->getClientOriginalName();
-                        $dest = "payslips/{$data['user_id']}/{$data['period_year']}-{$data['period_month']}/$filename";
+                        $filename = $uploadedFile instanceof TemporaryUploadedFile
+                            ? $uploadedFile->getClientOriginalName()
+                            : basename($uploadedFile);
 
-                        // sposta file dalla tmp
-                        Storage::disk($disk)->move(
-                            $file->getRealPath(),
-                            $dest
+                        $directory = sprintf(
+                            'payslips/%d/%s',
+                            $data['user_id'],
+                            sprintf('%d-%02d', $data['period_year'], $data['period_month'])
                         );
 
-                        DgPayslip::create([
+                        if ($uploadedFile instanceof TemporaryUploadedFile) {
+                            $storedPath = $uploadedFile->storeAs($directory, $filename, $disk);
+                        } else {
+                            $storedPath = $directory . '/' . $filename;
+                            Storage::disk($disk)->makeDirectory($directory);
+                            Storage::disk($disk)->move($uploadedFile, $storedPath);
+                        }
+
+                        $payslip = DgPayslip::create([
                             'user_id' => $data['user_id'],
                             'file_name' => $filename,
-                            'file_path' => $dest,
+                            'file_path' => $storedPath,
                             'storage_disk' => $disk,
                             'period_year' => $data['period_year'],
                             'period_month' => $data['period_month'],
@@ -129,6 +136,17 @@ class DgPayslipResource extends Resource
                             'uploaded_by' => auth()->id(),
                             'uploaded_at' => now(),
                         ]);
+
+                        activity('Buste paga')
+                            ->causedBy(auth()->user())
+                            ->performedOn($payslip)
+                            ->withProperties([
+                                'file' => $filename,
+                                'user' => $payslip->user?->full_name,
+                                'year' => $data['period_year'],
+                                'month' => $data['period_month'],
+                            ])
+                            ->log('Upload singolo busta paga');
 
                         Notification::make()
                             ->title('Busta paga caricata con successo')
@@ -172,35 +190,46 @@ class DgPayslipResource extends Resource
                         $files = scandir($extractTo);
 
                         foreach ($files as $pdf) {
-                            if (!str_ends_with(strtolower($pdf), '.pdf')) continue;
+                            if (!str_ends_with(strtolower($pdf), '.pdf')) {
+                                continue;
+                            }
 
                             $filename = $pdf;
                             $fullPath = $extractTo . '/' . $pdf;
                             $content = file_get_contents($fullPath);
 
-                            // ✅ match tramite payroll_code nel nome file
-                            $matchedUser = User::where('payroll_code', 'ILIKE', "%$filename%")->first();
+                            $matchedUser = self::matchUserFromFilename($filename);
 
                             if (!$matchedUser) {
-                                // errore → salva record ma non visibile
+                                $errorPath = "payslips/import/error/$filename";
+
+                                Storage::disk($disk)->put($errorPath, $content);
+
                                 DgPayslip::create([
                                     'file_name' => $filename,
-                                    'file_path' => "payslips/import/error/$filename",
+                                    'file_path' => $errorPath,
                                     'storage_disk' => $disk,
                                     'status' => 'error',
                                 ]);
 
-                                Storage::disk($disk)->put("payslips/import/error/$filename", $content);
                                 continue;
                             }
 
                             $year = now()->year;
                             $month = now()->month;
 
-                            $dest = "payslips/{$matchedUser->id}/{$year}-{$month}/$filename";
+                            $directory = sprintf(
+                                'payslips/%d/%s',
+                                $matchedUser->id,
+                                sprintf('%d-%02d', $year, $month)
+                            );
+
+                            $dest = $directory . '/' . $filename;
+
+                            Storage::disk($disk)->makeDirectory($directory);
                             Storage::disk($disk)->put($dest, $content);
 
-                            DgPayslip::create([
+                            $payslip = DgPayslip::create([
                                 'user_id' => $matchedUser->id,
                                 'file_name' => $filename,
                                 'file_path' => $dest,
@@ -212,10 +241,9 @@ class DgPayslipResource extends Resource
                                 'uploaded_at' => now(),
                             ]);
 
-                            // ✅ LOG DEL MATCH
                             activity('Buste paga')
                                 ->causedBy(auth()->user())
-                                ->performedOn($p)
+                                ->performedOn($payslip)
                                 ->withProperties([
                                     'file' => $filename,
                                     'user' => $matchedUser->full_name ?? null,
@@ -223,7 +251,8 @@ class DgPayslipResource extends Resource
                                     'month' => $month,
                                 ])
                                 ->log('Import ZIP: busta paga associata');
-                        
+
+                            @unlink($fullPath);
                         }
 
                         Notification::make()
@@ -250,37 +279,31 @@ class DgPayslipResource extends Resource
             ]);
     }
 
-    // ✅ Metodo chiamato dalla modale Blade
-    public function fixError(int $id)
+    protected static function matchUserFromFilename(string $filename): ?User
     {
-        $data = $this->form;
+        $name = strtoupper(pathinfo($filename, PATHINFO_FILENAME));
+        $name = preg_replace('/[^A-Z0-9]/', '', $name);
 
-        $record = DgPayslip::findOrFail($id);
+        if (!$name) {
+            return null;
+        }
 
-        $disk = $record->storage_disk;
-        $filename = $record->file_name;
+        $candidates = collect([$name]);
 
-        $oldPath = $record->file_path;
-        $newPath = "payslips/{$data['user_id']}/{$data['period_year']}-{$data['period_month']}/$filename";
+        if (preg_match_all('/[A-Z0-9]{4,}/', $name, $matches)) {
+            $candidates = $candidates->merge($matches[0]);
+        }
 
-        Storage::disk($disk)->move($oldPath, $newPath);
+        $candidates = $candidates->unique()->filter();
 
-        $record->update([
-            'user_id' => $data['user_id'],
-            'period_year' => $data['period_year'],
-            'period_month' => $data['period_month'],
-            'file_path' => $newPath,
-            'status' => 'matched',
-            'uploaded_by' => auth()->id(),
-            'uploaded_at' => now(),
-        ]);
+        foreach ($candidates as $candidate) {
+            $user = User::whereRaw('UPPER(payroll_code) = ?', [$candidate])->first();
+            if ($user) {
+                return $user;
+            }
+        }
 
-        Notification::make()
-            ->title('Busta paga corretta')
-            ->success()
-            ->send();
-
-        $this->dispatch('close-modal');
+        return null;
     }
 
     public static function getPages(): array
