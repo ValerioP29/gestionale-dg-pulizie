@@ -2,24 +2,25 @@
 
 namespace App\Filament\Widgets;
 
-use Filament\Widgets\ChartWidget;
-use Filament\Forms;
 use App\Models\DgReportCache;
-use App\Models\User;
 use App\Models\DgSite;
-use Illuminate\Support\Facades\DB;
-use Carbon\Carbon;
+use App\Models\User;
+use Carbon\CarbonImmutable;
+use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\Select;
+use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
+use Filament\Widgets\ChartWidget;
+use Illuminate\Support\Collection;
+use Livewire\Attributes\On;
 
 class AdvancedWorkedHoursChart extends ChartWidget implements HasForms
 {
-    use \Filament\Forms\Concerns\InteractsWithForms;
+    use InteractsWithForms;
 
-    protected static ?string $heading = 'Ore Lavorate — Analisi Interattiva';
-    protected int|string|array $columnSpan = 'full';
-
-    protected bool $hasForm = true;
-    protected static string $view = 'filament.widgets.chart-with-filters'; // <-- AGGIUNTO
+    protected static ?string $heading = 'Ore lavorate — analisi';
+    protected int|string|array $columnSpan = ['lg' => 2, 'xl' => 2];
+    protected static string $view = 'filament.widgets.chart-with-filters';
 
     public ?int $userId = null;
     public ?int $siteId = null;
@@ -30,31 +31,29 @@ class AdvancedWorkedHoursChart extends ChartWidget implements HasForms
     protected function getFormSchema(): array
     {
         return [
-            Forms\Components\Select::make('userId')
+            Select::make('userId')
                 ->label('Dipendente')
-                ->options(User::orderBy('name')->pluck('name', 'id'))
+                ->options(fn () => User::query()->orderBy('name')->pluck('name', 'id'))
                 ->placeholder('Tutti')
-                ->reactive()
-                ->searchable(),
-
-            Forms\Components\Select::make('siteId')
+                ->searchable()
+                ->reactive(),
+            Select::make('siteId')
                 ->label('Cantiere')
-                ->options(DgSite::orderBy('name')->pluck('name', 'id'))
+                ->options(fn () => DgSite::query()->orderBy('name')->pluck('name', 'id'))
                 ->placeholder('Tutti')
-                ->reactive()
-                ->searchable(),
-
-            Forms\Components\DatePicker::make('from')
+                ->searchable()
+                ->reactive(),
+            DatePicker::make('from')
                 ->label('Da')
-                ->default(now()->subMonths(6)->startOfMonth())
+                ->default(fn () => CarbonImmutable::now()->subMonths(5)->startOfMonth())
+                ->maxDate(fn () => $this->to ? CarbonImmutable::parse($this->to) : null)
                 ->reactive(),
-
-            Forms\Components\DatePicker::make('to')
+            DatePicker::make('to')
                 ->label('A')
-                ->default(now()->endOfMonth())
+                ->default(fn () => CarbonImmutable::now()->endOfMonth())
+                ->minDate(fn () => $this->from ? CarbonImmutable::parse($this->from) : null)
                 ->reactive(),
-
-            Forms\Components\Select::make('groupBy')
+            Select::make('groupBy')
                 ->label('Raggruppa per')
                 ->options([
                     'day' => 'Giorno',
@@ -68,46 +67,71 @@ class AdvancedWorkedHoursChart extends ChartWidget implements HasForms
 
     protected function getData(): array
     {
-        $groupExpr = match ($this->groupBy) {
-            'day'   => "TO_CHAR(period_start, 'YYYY-MM-DD')",
-            'week'  => "TO_CHAR(DATE_TRUNC('week', period_start), 'IYYY-IW')",
-            default => "TO_CHAR(period_start, 'YYYY-MM')",
+        $start = $this->from
+            ? CarbonImmutable::parse($this->from)->startOfDay()
+            : CarbonImmutable::now()->subMonths(5)->startOfMonth();
+
+        $end = $this->to
+            ? CarbonImmutable::parse($this->to)->endOfDay()
+            : CarbonImmutable::now()->endOfMonth();
+
+        if ($start->gt($end)) {
+            [$start, $end] = [$end->copy()->startOfDay(), $start->copy()->endOfDay()];
+        }
+
+        $bucketExpression = match ($this->groupBy) {
+            'day' => "DATE_TRUNC('day', period_start)",
+            'week' => "DATE_TRUNC('week', period_start)",
+            default => "DATE_TRUNC('month', period_start)",
         };
 
-        $data = DgReportCache::query()
-            ->selectRaw("$groupExpr AS period, SUM(worked_hours) AS total")
-            ->when($this->userId, fn($q) => $q->where('user_id', $this->userId))
-            ->when($this->siteId, fn($q) => $q->where('site_id', $this->siteId))
-            ->when($this->from, fn($q) => $q->whereDate('period_start', '>=', $this->from))
-            ->when($this->to, fn($q) => $q->whereDate('period_end', '<=', $this->to))
-            ->groupBy('period')
-            ->orderBy('period')
-            ->get();
+        $query = DgReportCache::query()
+            ->selectRaw("{$bucketExpression} AS bucket, SUM(worked_hours) AS total_hours")
+            ->whereBetween('period_start', [$start->toDateString(), $end->toDateString()])
+            ->whereBetween('period_end', [$start->toDateString(), $end->toDateString()])
+            ->when($this->userId, fn ($builder) => $builder->where('user_id', (int) $this->userId))
+            ->when($this->siteId, fn ($builder) => $builder->where(function ($inner) {
+                $siteId = (int) $this->siteId;
 
-        $labels = $data->pluck('period')->map(function ($p) {
-            try {
-                if (str_contains($p, '-W')) return $p;
-                $format = strlen($p) === 7 ? 'Y-m' : 'Y-m-d';
-                return Carbon::createFromFormat($format, $p)->translatedFormat(strlen($p) === 7 ? 'M Y' : 'd M');
-            } catch (\Exception $e) {
-                return $p;
-            }
-        });
+                $inner
+                    ->where('resolved_site_id', $siteId)
+                    ->orWhere('site_id', $siteId);
+            }))
+            ->groupByRaw('bucket')
+            ->orderBy('bucket');
+
+        $rows = $query->get();
+
+        if ($rows->isEmpty()) {
+            return [
+                'datasets' => [[
+                    'label' => 'Ore totali',
+                    'data' => [],
+                    'borderColor' => '#3b82f6',
+                    'backgroundColor' => 'rgba(59,130,246,0.15)',
+                    'borderWidth' => 2,
+                    'tension' => 0.35,
+                    'fill' => true,
+                ]],
+                'labels' => [],
+            ];
+        }
+
+        $labels = $this->formatLabels($rows->pluck('bucket'));
+        $values = $rows->pluck('total_hours')->map(fn ($value) => round((float) $value, 2));
 
         return [
-            'datasets' => [
-                [
-                    'label' => 'Ore totali',
-                    'data' => $data->pluck('total'),
-                    'borderColor' => '#3b82f6',
-                    'backgroundColor' => 'rgba(59,130,246,0.25)',
-                    'borderWidth' => 3,
-                    'fill' => true,
-                    'tension' => 0.4,
-                    'pointRadius' => 5,
-                    'pointHoverRadius' => 7,
-                ],
-            ],
+            'datasets' => [[
+                'label' => 'Ore totali',
+                'data' => $values,
+                'borderColor' => '#3b82f6',
+                'backgroundColor' => 'rgba(59,130,246,0.15)',
+                'borderWidth' => 2,
+                'tension' => 0.35,
+                'fill' => true,
+                'pointRadius' => 4,
+                'pointHoverRadius' => 6,
+            ]],
             'labels' => $labels,
         ];
     }
@@ -122,35 +146,66 @@ class AdvancedWorkedHoursChart extends ChartWidget implements HasForms
         return [
             'plugins' => [
                 'legend' => [
-                    'labels' => ['color' => '#e2e8f0', 'font' => ['size' => 13]],
+                    'labels' => [
+                        'color' => '#0f172a',
+                    ],
                 ],
                 'tooltip' => [
-                    'backgroundColor' => '#1e293b',
-                    'titleColor' => '#f1f5f9',
-                    'bodyColor' => '#e2e8f0',
-                    'displayColors' => false,
+                    'mode' => 'index',
+                    'intersect' => false,
                 ],
             ],
+            'interaction' => [
+                'mode' => 'nearest',
+                'intersect' => false,
+            ],
             'scales' => [
-                'x' => ['grid' => ['color' => 'rgba(255,255,255,0.05)']],
-                'y' => ['beginAtZero' => true],
+                'x' => [
+                    'title' => [
+                        'display' => true,
+                        'text' => 'Periodo',
+                    ],
+                ],
+                'y' => [
+                    'title' => [
+                        'display' => true,
+                        'text' => 'Ore',
+                    ],
+                    'beginAtZero' => true,
+                ],
             ],
         ];
     }
 
     public function getChartData(): array
-{
-    return [
-        'type' => $this->getType(),
-        'data' => $this->getData(),
-        'options' => $this->getOptions(),
-    ];
-}
+    {
+        return [
+            'type' => $this->getType(),
+            'data' => $this->getData(),
+            'options' => $this->getOptions(),
+        ];
+    }
 
-#[\Livewire\Attributes\On('updateChart')]
-public function updateChart(): void
-{
-    $this->dispatch('updateChartData', data: $this->getData());
-}
+    #[On('updateChart')]
+    public function updateChart(): void
+    {
+        $this->dispatch('updateChartData', data: $this->getData());
+    }
 
+    protected function formatLabels(Collection $buckets): Collection
+    {
+        return $buckets->map(function ($value) {
+            if ($value instanceof CarbonImmutable) {
+                $bucket = $value;
+            } else {
+                $bucket = CarbonImmutable::parse($value);
+            }
+
+            return match ($this->groupBy) {
+                'day' => $bucket->translatedFormat('d M Y'),
+                'week' => sprintf('Settimana %s', $bucket->isoWeek()),
+                default => $bucket->translatedFormat('M Y'),
+            };
+        });
+    }
 }

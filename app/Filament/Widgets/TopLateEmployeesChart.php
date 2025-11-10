@@ -2,43 +2,61 @@
 
 namespace App\Filament\Widgets;
 
-use Filament\Widgets\ChartWidget;
 use App\Models\DgAnomaly;
 use App\Models\User;
-use Carbon\Carbon;
-use Illuminate\Support\Facades\DB;
+use Carbon\CarbonImmutable;
+use Filament\Widgets\ChartWidget;
 
 class TopLateEmployeesChart extends ChartWidget
 {
-    protected static ?string $heading = 'Top 5 Ritardatari del Mese';
-    protected int|string|array $columnSpan = 'full';
+    protected static ?string $heading = 'Top ritardi mese corrente';
+    protected int|string|array $columnSpan = ['lg' => 2, 'xl' => 2];
 
     protected function getData(): array
     {
-        $month = Carbon::now()->month;
+        $now = CarbonImmutable::now();
+        $start = $now->startOfMonth();
+        $end = $now->endOfMonth();
 
         $rows = DgAnomaly::query()
-            ->selectRaw('user_id, COUNT(*) as count')
             ->where('type', 'late_entry')
-            ->whereMonth('date', $month)
+            ->whereNotNull('user_id')
+            ->whereBetween('date', [$start->toDateString(), $end->toDateString()])
+            ->selectRaw('user_id, COUNT(*) as total')
             ->groupBy('user_id')
-            ->orderByDesc('count')
+            ->orderByDesc('total')
             ->limit(5)
             ->get();
 
-        $labels = $rows->map(fn ($r) => User::find($r->user_id)?->full_name ?? '—');
-        $data = $rows->pluck('count');
+        if ($rows->isEmpty()) {
+            return [
+                'datasets' => [[
+                    'label' => 'Ritardi',
+                    'data' => [],
+                    'backgroundColor' => [],
+                    'borderColor' => '#c2410c',
+                ]],
+                'labels' => [],
+            ];
+        }
+
+        $userNames = User::query()
+            ->whereIn('id', $rows->pluck('user_id')->all())
+            ->get()
+            ->mapWithKeys(fn (User $user) => [$user->id => $user->full_name]);
+
+        $labels = $rows->map(fn ($row) => $userNames[$row->user_id] ?? '—');
+        $data = $rows->pluck('total')->map(fn ($value) => (int) $value);
 
         return [
-            'datasets' => [
-                [
-                    'label' => 'Ritardi',
-                    'data' => $data,
-                    'backgroundColor' => 'rgba(234, 88, 12, 0.5)',
-                    'borderColor' => '#ea580c',
-                    'borderWidth' => 2,
-                ],
-            ],
+            'datasets' => [[
+                'label' => 'Ritardi',
+                'data' => $data,
+                'backgroundColor' => 'rgba(249, 115, 22, 0.6)',
+                'borderColor' => '#c2410c',
+                'borderWidth' => 1,
+                'borderRadius' => 6,
+            ]],
             'labels' => $labels,
         ];
     }
@@ -46,5 +64,23 @@ class TopLateEmployeesChart extends ChartWidget
     protected function getType(): string
     {
         return 'bar';
+    }
+
+    protected function getOptions(): array
+    {
+        return [
+            'plugins' => [
+                'legend' => ['display' => false],
+            ],
+            'scales' => [
+                'x' => [
+                    'ticks' => ['color' => '#0f172a'],
+                ],
+                'y' => [
+                    'beginAtZero' => true,
+                    'ticks' => ['stepSize' => 1],
+                ],
+            ],
+        ];
     }
 }
