@@ -84,9 +84,9 @@ class AnomalyEngine
                 ]);
             }
 
-            // snapshot JSON per UI
+            // snapshot JSON per UI, evitando di ri-triggerare observer
             $session->anomaly_flags = $flags;
-            $session->save();
+            $session->saveQuietly();
         });
     }
 
