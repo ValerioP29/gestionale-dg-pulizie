@@ -17,8 +17,7 @@ use Filament\Tables\Table;
 use Filament\Resources\Resource;
 use Filament\Notifications\Notification;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\CarbonImmutable;
-use Illuminate\Support\Collection;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Str;
 
 class DgReportCacheResource extends Resource
@@ -209,10 +208,6 @@ class DgReportCacheResource extends Resource
                             'period_end' => $end->toDateString(),
                             'source' => 'manual',
                         ]);
-
-                            $start->toDateString(),
-                            $end->toDateString()
-                        );
 
                         Notification::make()
                             ->title('Rigenerazione avviata')

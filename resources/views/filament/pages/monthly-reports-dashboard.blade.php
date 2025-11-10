@@ -33,9 +33,9 @@
 
         @unless($hasData)
             <x-filament::section>
-                <x-filament::alert color="warning">
+                <div class="p-3 w-full rounded-md bg-warning-100 text-warning-800 dark:bg-warning-900 dark:text-warning-200">
                     Nessun dato disponibile per il periodo selezionato.
-                </x-filament::alert>
+                </div>
             </x-filament::section>
         @endunless
 

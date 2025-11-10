@@ -7,7 +7,7 @@ use Filament\Widgets;
 
 class Dashboard extends BaseDashboard
 {
-    protected function getHeaderWidgets(): array
+    public function getHeaderWidgets(): array
     {
         return [
             Widgets\StatsOverviewWidget::class,
@@ -16,7 +16,7 @@ class Dashboard extends BaseDashboard
         ];
     }
 
-    protected function getHeaderWidgetsColumns(): int|string|array
+    public function getHeaderWidgetsColumns(): int|string|array
     {
         return [
             'sm' => 1,
@@ -25,7 +25,7 @@ class Dashboard extends BaseDashboard
         ];
     }
 
-    protected function getFooterWidgets(): array
+    public function getFooterWidgets(): array
     {
         return [
             \App\Filament\Widgets\AdvancedWorkedHoursChart::class,
@@ -34,7 +34,7 @@ class Dashboard extends BaseDashboard
         ];
     }
 
-    protected function getFooterWidgetsColumns(): int|string|array
+    public function getFooterWidgetsColumns(): int|string|array
     {
         return [
             'sm' => 1,
