@@ -70,8 +70,7 @@ class DgPunchObserver
                     }
                 }
 
-                $session->save(); 
-                (new AnomalyEngine())->evaluateSession($session);
+                $session->save();
             });
         });
     }
