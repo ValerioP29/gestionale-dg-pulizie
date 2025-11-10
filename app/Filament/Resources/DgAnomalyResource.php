@@ -210,11 +210,4 @@ class DgAnomalyResource extends Resource
             'edit'  => Pages\EditDgAnomaly::route('/{record}/edit'),
         ];
     }
-
-    public static function getRelations(): array
-{
-    return [
-        \App\Filament\Resources\DgAnomalyResource\RelationManagers\JustificationsRelationManager::class,
-    ];
-}
 }
