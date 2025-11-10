@@ -39,18 +39,37 @@ class DgPunchObserver
 
             \DB::transaction(function () use ($p, $when, $sessionDate) {
 
-                $session = DgWorkSession::firstOrCreate(
-                    [
-                        'user_id'      => $p->user_id,
-                        'session_date' => $sessionDate,
-                    ],
-                    [
-                        'site_id'        => $p->site_id,
+                $sessionSiteId = SiteResolverService::resolveFor(
+                    $p->user ?? $p->user()->first(),
+                    $p->site_id,
+                    $when
+                );
+
+                $session = DgWorkSession::where('user_id', $p->user_id)
+                    ->whereDate('session_date', $sessionDate)
+                    ->where(function ($q) use ($sessionSiteId) {
+                        if (is_null($sessionSiteId)) {
+                            $q->whereNull('site_id');
+                        } else {
+                            $q->where('site_id', $sessionSiteId);
+                        }
+                    })
+                    ->first();
+
+                if (!$session) {
+                    $session = new DgWorkSession([
+                        'user_id'        => $p->user_id,
+                        'session_date'   => $sessionDate,
+                        'site_id'        => $sessionSiteId,
                         'status'         => 'incomplete',
                         'worked_minutes' => 0,
                         'source'         => $p->source ?: 'auto',
-                    ]
-                );
+                    ]);
+                }
+
+                if ($session->site_id !== $sessionSiteId) {
+                    $session->site_id = $sessionSiteId;
+                }
 
                 // Link punch → sessione SENZA eventi
                 DgPunch::withoutEvents(function () use ($p, $session) {

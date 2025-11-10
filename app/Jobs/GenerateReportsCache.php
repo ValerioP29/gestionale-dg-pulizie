@@ -27,8 +27,19 @@ class GenerateReportsCache implements ShouldQueue
 
     public function handle(): void
     {
-        $start = $this->periodStart ? Carbon::parse($this->periodStart)->startOfDay() : now()->startOfMonth();
-        $end   = $this->periodEnd   ? Carbon::parse($this->periodEnd)->endOfDay()   : now()->endOfMonth();
+        $start = $this->periodStart
+            ? Carbon::parse($this->periodStart)->startOfDay()
+            : null;
+
+        $end = $this->periodEnd
+            ? Carbon::parse($this->periodEnd)->endOfDay()
+            : null;
+
+        if (!$start || !$end) {
+            $anchor = now()->subMonthNoOverflow();
+            $start ??= $anchor->copy()->startOfMonth();
+            $end   ??= $anchor->copy()->endOfMonth();
+        }
 
         // Prendiamo solo i campi necessari per non sprecare RAM
         $sessions = DgWorkSession::query()
@@ -76,25 +87,25 @@ class GenerateReportsCache implements ShouldQueue
                 $earlyExits  = (clone $anomaliesQuery)->where('type', 'early_exit')->count();
                 $absences    = (clone $anomaliesQuery)->where('type', 'absence')->count();
 
-               DgReportCache::updateOrCreate(
-                [
-                    'user_id'      => $userId,
-                    'site_id'      => $siteId,
-                    'period_start' => $start->toDateString(),
-                    'period_end'   => $end->toDateString(),
-                ],
-                [
-                    'resolved_site_id' => $siteId, // ✅ salva anche il resolved
-                    'worked_hours'     => $workedHours,
-                    'days_present'     => $daysPresent,
-                    'days_absent'      => $absences,
-                    'late_entries'     => $lateEntries,
-                    'early_exits'      => $earlyExits,
-                    'overtime_minutes' => $overtimeMinutes ?? 0,
-                    'generated_at'     => now(),
-                    'is_final'         => false,
-                ]
-            );
+                DgReportCache::updateOrCreate(
+                    [
+                        'user_id'      => $userId,
+                        'site_id'      => $siteId,
+                        'period_start' => $start->toDateString(),
+                        'period_end'   => $end->toDateString(),
+                    ],
+                    [
+                        'resolved_site_id' => $siteId, // ✅ salva anche il resolved
+                        'worked_hours'     => $workedHours,
+                        'days_present'     => $daysPresent,
+                        'days_absent'      => $absences,
+                        'late_entries'     => $lateEntries,
+                        'early_exits'      => $earlyExits,
+                        'overtime_minutes' => $overtimeMinutes ?? 0,
+                        'generated_at'     => now(),
+                        'is_final'         => false,
+                    ]
+                );
 
             }
         }
