@@ -3,15 +3,18 @@
 namespace App\Filament\Resources;
 
 use App\Filament\Resources\DgReportCacheResource\Pages;
+use App\Jobs\GenerateReportsCache as GenerateReportsCacheJob;
 use App\Models\DgReportCache;
-use App\Models\User;
 use App\Models\DgSite;
+use App\Models\User;
 use Filament\Forms;
 use Filament\Tables;
 use Filament\Forms\Form;
 use Filament\Tables\Table;
 use Filament\Resources\Resource;
+use Filament\Notifications\Notification;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\CarbonImmutable;
 
 class DgReportCacheResource extends Resource
 {
@@ -95,6 +98,55 @@ class DgReportCacheResource extends Resource
                     ),
             ])
             ->defaultSort('period_start', 'desc')
+            ->headerActions([
+                Tables\Actions\Action::make('rigenera_mese')
+                    ->label('Rigenera mese')
+                    ->icon('heroicon-o-arrow-path')
+                    ->form([
+                        Forms\Components\TextInput::make('year')
+                            ->label('Anno')
+                            ->numeric()
+                            ->default(now()->year)
+                            ->required(),
+                        Forms\Components\Select::make('month')
+                            ->label('Mese')
+                            ->options([
+                                '1'  => 'Gennaio',
+                                '2'  => 'Febbraio',
+                                '3'  => 'Marzo',
+                                '4'  => 'Aprile',
+                                '5'  => 'Maggio',
+                                '6'  => 'Giugno',
+                                '7'  => 'Luglio',
+                                '8'  => 'Agosto',
+                                '9'  => 'Settembre',
+                                '10' => 'Ottobre',
+                                '11' => 'Novembre',
+                                '12' => 'Dicembre',
+                            ])
+                            ->default((string) now()->month)
+                            ->required(),
+                    ])
+                    ->action(function (array $data) {
+                        $year = (int) $data['year'];
+                        $month = (int) $data['month'];
+
+                        $start = CarbonImmutable::createFromDate($year, $month, 1)->startOfMonth();
+                        $end = $start->endOfMonth();
+
+                        GenerateReportsCacheJob::dispatch(
+                            $start->toDateString(),
+                            $end->toDateString()
+                        );
+
+                        Notification::make()
+                            ->title('Rigenerazione avviata')
+                            ->body("Report del {$start->translatedFormat('F Y')} in elaborazione")
+                            ->success()
+                            ->send();
+                    })
+                    ->visible(fn () => auth()->user()->hasAnyRole(['admin', 'supervisor'])),
+            ])
             ->actions([
                 Tables\Actions\EditAction::make()->visible(fn () => auth()->user()->hasAnyRole(['admin','supervisor'])),
                 Tables\Actions\DeleteAction::make()->visible(fn () => auth()->user()->isRole('admin')),
