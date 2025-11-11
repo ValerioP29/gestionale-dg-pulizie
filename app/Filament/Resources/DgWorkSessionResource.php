@@ -7,6 +7,7 @@ use App\Models\DgWorkSession;
 use App\Models\User;
 use App\Models\DgSite;
 use App\Services\Anomalies\AnomalyEngine;
+use App\Services\WorkSessions\WorkSessionApprovalService;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -235,8 +236,15 @@ class DgWorkSessionResource extends Resource
                     ->color('success')
                     ->requiresConfirmation()
                     ->action(function ($records) {
+                        $actor = auth()->user();
+                        if (! $actor) {
+                            return;
+                        }
+
+                        $service = app(WorkSessionApprovalService::class);
+
                         foreach ($records as $session) {
-                            $session->markApproved();
+                            $service->approve($session, $actor);
                         }
                     })
                     ->visible(fn () => auth()->user()->hasAnyRole(['admin','supervisor'])),
