@@ -3,10 +3,10 @@
 namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
-use App\Models\DgWorkSession;
-use App\Models\DgReportsCache;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\CarbonImmutable;
+use Illuminate\Support\Facades\Log;
+use App\Jobs\GenerateReportsCache as GenerateReportsCacheJob;
+use App\Support\ReportsCacheStatus;
 
 class GenerateReportsCache extends Command
 {
@@ -23,36 +23,24 @@ class GenerateReportsCache extends Command
 
         $this->info("📊 Generazione reports_cache da {$start->toDateString()} a {$end->toDateString()}");
 
-        $sessions = DgWorkSession::query()
-            ->whereBetween('session_date', [$start, $end])
-            ->get()
-            ->groupBy(['user_id', 'site_id']);
+        if (ReportsCacheStatus::isRunning()) {
+            $this->warn('⚠️ Rigenerazione già in corso, attendi il completamento prima di riprovare.');
 
-        $total = 0;
-
-        foreach ($sessions as $userId => $bySite) {
-            foreach ($bySite as $siteId => $records) {
-                $hours = round($records->sum('worked_minutes') / 60, 2);
-
-                DgReportsCache::updateOrCreate(
-                    [
-                        'user_id' => $userId,
-                        'site_id' => $siteId,
-                        'period_start' => $start,
-                        'period_end' => $end,
-                    ],
-                    [
-                        'worked_hours' => $hours,
-                        'is_valid' => true,
-                        'generated_at' => now(),
-                    ]
-                );
-
-                $total++;
-            }
+            return;
         }
 
-        $this->info("✅ Generati {$total} record di report cache");
-        Log::info("Report cache aggiornato ({$total} record) per {$month}/{$year}");
+        ReportsCacheStatus::markPending([
+            'period_start' => $start->toDateString(),
+            'period_end' => $end->toDateString(),
+            'source' => 'cli',
+        ]);
+
+        GenerateReportsCacheJob::dispatchSync(
+            $start->toDateString(),
+            $end->toDateString()
+        );
+
+        $this->info('✅ Cache dei report rigenerata tramite job dedicato');
+        Log::info("Report cache aggiornato per {$month}/{$year}");
     }
 }

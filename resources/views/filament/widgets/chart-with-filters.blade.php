@@ -2,15 +2,43 @@
     <x-filament::section>
         <div class="space-y-6">
             {{-- Form dei filtri --}}
-            <form wire:submit.prevent="updateChart" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                {{ $this->form }}
-                <div class="col-span-full">
-                    <x-filament::button type="submit" color="primary" class="mt-2">
-                        Aggiorna grafico
-                    </x-filament::button>
-                </div>
-            </form>
+            <form wire:submit.prevent="updateChart" class="grid gap-3 md:grid-cols-3">
 
+            {{-- 1ª riga: 3 campi --}}
+            <div>
+                {{ $this->form->getComponent('userId') }}
+            </div>
+
+            <div>
+                {{ $this->form->getComponent('siteId') }}
+            </div>
+
+            <div>
+                {{ $this->form->getComponent('from') }}
+            </div>
+
+            {{-- 2ª riga: 2 campi + bottone --}}
+            <div>
+                {{ $this->form->getComponent('to') }}
+            </div>
+
+            <div>
+                {{ $this->form->getComponent('groupBy') }}
+            </div>
+
+        <div class="md:col-span-3 flex items-center">
+            <div class="inline-block">
+                <x-filament::button
+                    type="submit"
+                    color="primary"
+                    class="!w-auto !max-w-fit !px-4 !py-1 text-sm"
+                >
+                    Aggiorna grafico
+                </x-filament::button>
+            </div>
+        </div>
+
+        </form>
 
             {{-- Grafico --}}
             <div
