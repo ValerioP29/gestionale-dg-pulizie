@@ -9,7 +9,13 @@ use Filament\Widgets\ChartWidget;
 class AnomaliesPieChart extends ChartWidget
 {
     protected static ?string $heading = 'Tipologia anomalie (mese corrente)';
-    protected int|string|array $columnSpan = ['lg' => 1, 'xl' => 1];
+    protected int|string|array $columnSpan = [
+        'sm' => 1,
+        'md' => 1,
+        'lg' => 1,
+        'xl' => 1,
+        '2xl' => 1,
+    ];
 
     protected function getType(): string
     {

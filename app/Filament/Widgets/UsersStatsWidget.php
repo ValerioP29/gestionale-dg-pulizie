@@ -8,7 +8,10 @@ use Filament\Widgets\StatsOverviewWidget\Card;
 
 class UsersStatsWidget extends BaseWidget
 {
-    protected int|string|array $columnSpan = ['lg' => 1, 'xl' => 1];
+    protected int|string|array $columnSpan = [
+        'lg' => 2,
+        'xl' => 2,
+    ];
 
     protected function getColumns(): int
     {

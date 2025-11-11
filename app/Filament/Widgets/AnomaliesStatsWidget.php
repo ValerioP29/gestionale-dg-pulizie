@@ -10,7 +10,10 @@ use Filament\Widgets\StatsOverviewWidget\Card;
 class AnomaliesStatsWidget extends BaseWidget
 {
     protected ?string $heading = 'Anomalie (ultimi 30 giorni)';
-    protected int|string|array $columnSpan = ['lg' => 1, 'xl' => 1];
+    protected int|string|array $columnSpan = [
+        'lg' => 2,
+        'xl' => 2,
+    ];
 
     protected function getColumns(): int
     {

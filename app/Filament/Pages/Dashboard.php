@@ -10,8 +10,8 @@ class Dashboard extends BaseDashboard
     public function getHeaderWidgets(): array
     {
         return [
-            Widgets\StatsOverviewWidget::class,
             \App\Filament\Widgets\UsersStatsWidget::class,
+            Widgets\StatsOverviewWidget::class,
             \App\Filament\Widgets\AnomaliesStatsWidget::class,
         ];
     }
@@ -30,7 +30,6 @@ class Dashboard extends BaseDashboard
         return [
             \App\Filament\Widgets\AdvancedWorkedHoursChart::class,
             \App\Filament\Widgets\AnomaliesPieChart::class,
-            \App\Filament\Widgets\TopLateEmployeesChart::class,
         ];
     }
 
