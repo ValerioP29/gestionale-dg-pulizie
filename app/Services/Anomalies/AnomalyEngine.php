@@ -20,6 +20,19 @@ class AnomalyEngine
     /** @var array<int, AnomalyRule> */
     protected array $rules;
 
+    /** @var string[] */
+    private array $calculatedTypes = [
+        'missing_punch',
+        'absence',
+        'overtime',
+        'unplanned_day',
+        'late_entry',
+        'early_exit',
+    ];
+
+    /** @var string[] */
+    private array $managedStatuses = ['approved', 'rejected', 'justified', 'managed'];
+
     public function __construct()
     {
         $this->rules = [
@@ -64,30 +77,81 @@ class AnomalyEngine
         $flags = array_values($byType);
 
         DB::transaction(function () use ($session, $flags, $date) {
-            // idempotenza — solo anomalie ricalcolabili
-            DgAnomaly::where('user_id', $session->user_id)
+            $existing = DgAnomaly::where('user_id', $session->user_id)
                 ->whereDate('date', $date->toDateString())
-                ->whereIn('type', [
-                    'missing_punch','absence','overtime','unplanned_day','late_entry','early_exit'
-                ])
-                ->delete();
+                ->whereIn('type', $this->calculatedTypes)
+                ->get()
+                ->keyBy(fn (DgAnomaly $anomaly) => $this->anomalyKey($anomaly->session_id, $anomaly->type, $date->toDateString()));
 
-            foreach ($flags as $a) {
-                DgAnomaly::create([
-                    'user_id'    => $session->user_id,
+            $desiredKeys = [];
+
+            foreach ($flags as $flag) {
+                $key = $this->anomalyKey($session->id, $flag['type'], $date->toDateString());
+
+                if (! $existing->has($key)) {
+                    $fallbackKey = $this->anomalyKey(null, $flag['type'], $date->toDateString());
+                    if ($existing->has($fallbackKey)) {
+                        $key = $fallbackKey;
+                    }
+                }
+
+                $desiredKeys[$key] = true;
+
+                if (! $existing->has($key)) {
+                    DgAnomaly::create([
+                        'user_id'    => $session->user_id,
+                        'session_id' => $session->id,
+                        'date'       => $date->toDateString(),
+                        'type'       => $flag['type'],
+                        'minutes'    => (int) ($flag['minutes'] ?? 0),
+                        'status'     => 'open',
+                        'note'       => $flag['note'] ?? null,
+                    ]);
+                    continue;
+                }
+
+                /** @var DgAnomaly $anomaly */
+                $anomaly = $existing->get($key);
+
+                if (in_array($anomaly->status, $this->managedStatuses, true)) {
+                    continue;
+                }
+
+                $anomaly->fill([
                     'session_id' => $session->id,
-                    'date'       => $date->toDateString(),
-                    'type'       => $a['type'],
-                    'minutes'    => (int)($a['minutes'] ?? 0),
-                    'status'     => 'open',
-                    'note'       => $a['note'] ?? null,
+                    'minutes'    => (int) ($flag['minutes'] ?? 0),
                 ]);
+
+                if (array_key_exists('note', $flag) && $flag['note'] !== $anomaly->note) {
+                    $anomaly->note = $flag['note'];
+                }
+
+                if ($anomaly->isDirty()) {
+                    $anomaly->save();
+                }
+            }
+
+            foreach ($existing as $key => $anomaly) {
+                if (isset($desiredKeys[$key]) || in_array($anomaly->status, $this->managedStatuses, true)) {
+                    continue;
+                }
+
+                $anomaly->delete();
             }
 
             // snapshot JSON per UI, evitando di ri-triggerare observer
             $session->anomaly_flags = $flags;
             $session->saveQuietly();
         });
+    }
+
+    private function anomalyKey(?int $sessionId, string $type, string $date): string
+    {
+        return implode('|', [
+            $sessionId ?? 'none',
+            $date,
+            $type,
+        ]);
     }
 
     /**

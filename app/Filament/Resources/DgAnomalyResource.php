@@ -7,6 +7,7 @@ use App\Models\DgAnomaly;
 use App\Models\User;
 use App\Models\DgSite;
 use App\Models\DgWorkSession;
+use App\Services\Anomalies\AnomalyStatusService;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -151,10 +152,17 @@ class DgAnomalyResource extends Resource
                     ])
                     ->visible(fn ($record) => $record->status === 'open' && auth()->user()->hasAnyRole(['admin','supervisor']))
                     ->action(function ($record, $data) {
+                        $actor = auth()->user();
+                        if (! $actor) {
+                            return;
+                        }
+
+                        $service = app(AnomalyStatusService::class);
+
                         if (!empty($data['note_admin'])) {
                             $record->note = $data['note_admin'];
                         }
-                        $record->markApproved();
+                        $service->approve($record, $actor);
                     }),
                 Tables\Actions\Action::make('rifiuta')
                     ->label('Respingi')
@@ -167,8 +175,15 @@ class DgAnomalyResource extends Resource
                     ])
                     ->visible(fn ($record) => $record->status === 'open' && auth()->user()->hasAnyRole(['admin','supervisor']))
                     ->action(function ($record, $data) {
+                        $actor = auth()->user();
+                        if (! $actor) {
+                            return;
+                        }
+
+                        $service = app(AnomalyStatusService::class);
+
                         $record->note = $data['note_admin'];   // salva motivazione
-                        $record->markRejected();               // gestisce status, user, timestamp, session update
+                        $service->reject($record, $actor);     // gestisce status, user, timestamp, session update
                     }),
                 Tables\Actions\EditAction::make()
                     ->visible(fn () => auth()->user()->hasAnyRole(['admin','supervisor'])),
@@ -183,8 +198,15 @@ class DgAnomalyResource extends Resource
                     ->color('success')
                     ->requiresConfirmation()
                     ->action(function ($records) {
+                        $actor = auth()->user();
+                        if (! $actor) {
+                            return;
+                        }
+
+                        $service = app(AnomalyStatusService::class);
+
                         foreach ($records as $r) {
-                            $r->markApproved();   // ✅ USA IL METODO NUOVO
+                            $service->approve($r, $actor);   // ✅ USA IL METODO NUOVO
                         }
                     })
                     ->visible(fn () => auth()->user()->hasAnyRole(['admin','supervisor'])),
@@ -195,8 +217,15 @@ class DgAnomalyResource extends Resource
                     ->color('danger')
                     ->requiresConfirmation()
                     ->action(function ($records) {
+                        $actor = auth()->user();
+                        if (! $actor) {
+                            return;
+                        }
+
+                        $service = app(AnomalyStatusService::class);
+
                         foreach ($records as $r) {
-                            $r->markRejected();   // ✅ USA IL METODO NUOVO
+                            $service->reject($r, $actor);   // ✅ USA IL METODO NUOVO
                         }
                     })
                     ->visible(fn () => auth()->user()->hasAnyRole(['admin','supervisor'])),

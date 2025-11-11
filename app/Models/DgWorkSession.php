@@ -92,31 +92,6 @@ class DgWorkSession extends Model
         return implode(' | ', $parts);
     }
 
-    public function markApproved(): void
-    {
-        $this->approval_status = 'approved';
-        $this->approved_at = now();
-        $this->approved_by = auth()->id();
-        $this->anomaly_flags = []; // pulisce anomalie risolte
-        $this->save();
-
-        activity('Sesioni di lavoro')
-            ->causedBy(auth()->user())
-            ->performedOn($this)
-            ->log('Sessione di lavoro approvata manualmente');
-    }
-
-    public function markRejected(?string $reason = null): void
-    {
-        $this->approval_status = 'rejected';
-        $this->approved_at = now();
-        $this->approved_by = auth()->id();
-        if ($reason) {
-            $this->override_reason = $reason;
-        }
-        $this->save();
-    }
-
     public function getActivitylogOptions(): \Spatie\Activitylog\LogOptions
     {
         return \Spatie\Activitylog\LogOptions::defaults()
