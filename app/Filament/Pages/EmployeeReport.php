@@ -64,7 +64,10 @@ class EmployeeReport extends Page implements HasForms
                     User::query()
                         ->orderBy('last_name')
                         ->orderBy('first_name')
-                        ->pluck('full_name', 'id')
+                        ->get()
+                        ->mapWithKeys(fn ($u) => [
+                            $u->id => $u->full_name
+                        ])
                         ->toArray()
                 )
                 ->searchable()
