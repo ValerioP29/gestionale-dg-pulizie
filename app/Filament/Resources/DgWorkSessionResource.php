@@ -2,10 +2,11 @@
 
 namespace App\Filament\Resources;
 
+use App\Enums\WorkSessionApprovalStatus;
 use App\Filament\Resources\DgWorkSessionResource\Pages;
+use App\Models\DgSite;
 use App\Models\DgWorkSession;
 use App\Models\User;
-use App\Models\DgSite;
 use App\Services\Anomalies\AnomalyEngine;
 use App\Services\WorkSessions\WorkSessionApprovalService;
 use Filament\Forms;
@@ -74,11 +75,7 @@ class DgWorkSessionResource extends Resource
                 ->disabled(),
 
             Forms\Components\Select::make('approval_status')
-                ->options([
-                    'pending'  => 'In attesa',
-                    'approved' => 'Approvata',
-                    'rejected' => 'Respinta',
-                ])
+                ->options(WorkSessionApprovalStatus::options())
                 ->label('Approvazione')
                 ->disabled(),
 
@@ -136,9 +133,10 @@ class DgWorkSessionResource extends Resource
 
                 Tables\Columns\BadgeColumn::make('approval_status')
                     ->colors([
-                        'warning' => 'pending',
-                        'success' => 'approved',
-                        'danger'  => 'rejected',
+                        'warning' => WorkSessionApprovalStatus::PENDING->value,
+                        'info'    => WorkSessionApprovalStatus::IN_REVIEW->value,
+                        'success' => WorkSessionApprovalStatus::APPROVED->value,
+                        'danger'  => WorkSessionApprovalStatus::REJECTED->value,
                     ])
                     ->label('Approvazione')
                     ->sortable(),
@@ -169,11 +167,7 @@ class DgWorkSessionResource extends Resource
                     ->label('Stato'),
 
                 SelectFilter::make('approval_status')
-                    ->options([
-                        'pending'  => 'In attesa',
-                        'approved' => 'Approvata',
-                        'rejected' => 'Respinta',
-                    ])
+                    ->options(WorkSessionApprovalStatus::options())
                     ->label('Approvazione'),
 
                 Filter::make('mese')

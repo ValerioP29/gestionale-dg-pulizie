@@ -2,8 +2,9 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
+use App\Enums\WorkSessionApprovalStatus;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
 use Spatie\Activitylog\Traits\LogsActivity;
 
 class DgWorkSession extends Model
@@ -31,6 +32,10 @@ class DgWorkSession extends Model
         'extra_reason',
         'override_set_by',
         'override_reason',
+    ];
+
+    protected $attributes = [
+        'approval_status' => WorkSessionApprovalStatus::PENDING->value,
     ];
 
     protected $casts = [
