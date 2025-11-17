@@ -54,7 +54,7 @@ class DgAnomalyResource extends Resource
                     ->label('Tipo')
                     ->colors([
                         'danger' => ['missing_punch','absence','unplanned_day'],
-                        'warning' => ['late_entry','early_exit'],
+                        'warning' => ['late_entry','early_exit','irregular_session'],
                         'info' => ['overtime'],
                     ])
                     ->formatStateUsing(fn ($state) => match ($state) {
@@ -64,6 +64,7 @@ class DgAnomalyResource extends Resource
                         'late_entry'    => 'Entrata in ritardo',
                         'early_exit'    => 'Uscita anticipata',
                         'overtime'      => 'Straordinario',
+                        'irregular_session' => 'Sessione irregolare',
                         default         => $state,
                     }),
 
@@ -108,6 +109,7 @@ class DgAnomalyResource extends Resource
                         'late_entry'    => 'Ritardo',
                         'early_exit'    => 'Uscita anticipata',
                         'overtime'      => 'Straordinario',
+                        'irregular_session' => 'Sessione irregolare',
                     ]),
 
                 SelectFilter::make('status')
