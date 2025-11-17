@@ -2,18 +2,22 @@
 
 namespace App\Services\WorkSessions;
 
+use App\Enums\WorkSessionApprovalStatus;
 use App\Models\DgWorkSession;
 use App\Models\User;
+use App\Support\ReportsCacheRegenerator;
 
 class WorkSessionApprovalService
 {
     public function approve(DgWorkSession $session, User $actor): void
     {
-        $session->approval_status = 'approved';
+        $session->approval_status = WorkSessionApprovalStatus::APPROVED->value;
         $session->approved_at = now();
         $session->approved_by = $actor->getKey();
         $session->anomaly_flags = [];
         $session->save();
+
+        ReportsCacheRegenerator::dispatchForSessionDate($session->session_date);
 
         activity('Sessioni di lavoro')
             ->causedBy($actor)
@@ -26,7 +30,7 @@ class WorkSessionApprovalService
 
     public function reject(DgWorkSession $session, User $actor, ?string $reason = null): void
     {
-        $session->approval_status = 'rejected';
+        $session->approval_status = WorkSessionApprovalStatus::REJECTED->value;
         $session->rejected_at = now();
         $session->rejected_by = $actor->getKey();
 
@@ -35,6 +39,8 @@ class WorkSessionApprovalService
         }
 
         $session->save();
+
+        ReportsCacheRegenerator::dispatchForSessionDate($session->session_date);
 
         activity('Sessioni di lavoro')
             ->causedBy($actor)

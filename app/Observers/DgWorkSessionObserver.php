@@ -2,9 +2,11 @@
 
 namespace App\Observers;
 
+use App\Enums\WorkSessionApprovalStatus;
 use App\Models\DgWorkSession;
-use App\Services\SiteResolverService;
 use App\Services\Anomalies\AnomalyEngine;
+use App\Services\SiteResolverService;
+use App\Support\ReportsCacheRegenerator;
 use Carbon\Carbon;
 
 class DgWorkSessionObserver
@@ -27,6 +29,7 @@ class DgWorkSessionObserver
         if (!$hasIn && !$hasOut) {
             $session->status = 'invalid';
             $session->worked_minutes = 0;
+            $this->syncApprovalStatus($session);
             return;
         }
 
@@ -50,19 +53,73 @@ class DgWorkSessionObserver
             if ($minutes > 18 * 60) $minutes = 18 * 60;
 
             $session->worked_minutes = $minutes;
+            $this->syncApprovalStatus($session);
             return;
         }
 
         // Solo uno dei due → incomplete, minuti = 0
         $session->status = 'incomplete';
         $session->worked_minutes = 0;
+
+        $this->syncApprovalStatus($session);
     }
 
     public function saved(DgWorkSession $session): void
     {
+        $fieldsAffectingReports = [
+            'check_in',
+            'check_out',
+            'worked_minutes',
+            'status',
+            'site_id',
+            'resolved_site_id',
+            'session_date',
+            'overtime_minutes',
+        ];
+
         // Ricalcola anomalie solo se qualcosa di rilevante è cambiato
-        if ($session->wasChanged(['check_in','check_out','worked_minutes','status','site_id','resolved_site_id'])) {
+        if ($session->wasChanged($fieldsAffectingReports)) {
             (new AnomalyEngine())->evaluateSession($session);
+            ReportsCacheRegenerator::dispatchForSessionDate($session->session_date);
+        }
+    }
+
+    private function syncApprovalStatus(DgWorkSession $session): void
+    {
+        $session->approval_status ??= WorkSessionApprovalStatus::PENDING->value;
+
+        if (! $session->exists) {
+            return;
+        }
+
+        $approvalSensitive = [
+            'check_in',
+            'check_out',
+            'worked_minutes',
+            'session_date',
+            'site_id',
+            'resolved_site_id',
+        ];
+
+        if (! $session->isDirty($approvalSensitive)) {
+            return;
+        }
+
+        $original = $session->getOriginal('approval_status');
+
+        if (in_array($original, [
+            WorkSessionApprovalStatus::APPROVED->value,
+            WorkSessionApprovalStatus::REJECTED->value,
+        ], true)) {
+            $session->approval_status = WorkSessionApprovalStatus::IN_REVIEW->value;
+            $session->approved_at = null;
+            $session->approved_by = null;
+
+            return;
+        }
+
+        if ($original !== WorkSessionApprovalStatus::IN_REVIEW->value) {
+            $session->approval_status = WorkSessionApprovalStatus::PENDING->value;
         }
     }
 }

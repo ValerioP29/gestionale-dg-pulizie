@@ -12,6 +12,7 @@ use App\Services\Anomalies\Rules\{
     OvertimeRule
 };
 use App\Services\Anomalies\Support\ContractDayDTO;
+use App\Support\ReportsCacheRegenerator;
 use Illuminate\Support\Facades\DB;
 use Carbon\CarbonImmutable;
 
@@ -75,6 +76,8 @@ class AnomalyEngine
         }
 
         $flags = array_values($byType);
+
+        $previousFlags = $session->anomaly_flags ?? [];
 
         DB::transaction(function () use ($session, $flags, $date) {
             $existing = DgAnomaly::where('user_id', $session->user_id)
@@ -143,6 +146,10 @@ class AnomalyEngine
             $session->anomaly_flags = $flags;
             $session->saveQuietly();
         });
+
+        if (json_encode($previousFlags) !== json_encode($flags)) {
+            ReportsCacheRegenerator::dispatchForSessionDate($session->session_date);
+        }
     }
 
     private function anomalyKey(?int $sessionId, string $type, string $date): string
