@@ -63,6 +63,10 @@ class MonthlyReportsDashboard extends Page implements HasForms, HasTable
     protected function getHeaderActions(): array
     {
         return [
+            Actions\Action::make('downloadExcelSheet')
+                ->label('Foglio ore Excel')
+                ->icon('heroicon-o-document-arrow-down')
+                ->url(fn () => $this->excelUrl(), shouldOpenInNewTab: true),
             Actions\Action::make('refreshCurrentMonth')
                 ->label('Rigenera report mese attuale')
                 ->icon('heroicon-o-arrow-path')
@@ -98,6 +102,44 @@ class MonthlyReportsDashboard extends Page implements HasForms, HasTable
                         ->send();
 
                     return null;
+                }),
+            Actions\Action::make('regenerateManualPeriod')
+                ->label('Rigenera mese specifico')
+                ->icon('heroicon-o-adjustments-vertical')
+                ->form(self::monthSelectionForm())
+                ->visible(fn () => auth()->user()?->hasAnyRole(['admin', 'supervisor']))
+                ->action(function (array $data) {
+                    $year = (int) $data['year'];
+                    $month = (int) $data['month'];
+
+                    $start = CarbonImmutable::createFromDate($year, $month, 1)->startOfMonth();
+                    $end = $start->endOfMonth();
+
+                    if (ReportsCacheStatus::isRunning()) {
+                        Notification::make()
+                            ->title('Rigenerazione già in corso')
+                            ->warning()
+                            ->send();
+
+                        return null;
+                    }
+
+                    ReportsCacheStatus::markPending([
+                        'period_start' => $start->toDateString(),
+                        'period_end' => $end->toDateString(),
+                        'source' => 'manual',
+                    ]);
+
+                    GenerateReportsCacheJob::dispatch(
+                        $start->toDateString(),
+                        $end->toDateString()
+                    );
+
+                    Notification::make()
+                        ->title('Rigenerazione avviata')
+                        ->success()
+                        ->body("Report del {$start->translatedFormat('F Y')} in elaborazione")
+                        ->send();
                 }),
             Actions\Action::make('downloadCsv')
                 ->label('Scarica CSV')
@@ -172,6 +214,45 @@ class MonthlyReportsDashboard extends Page implements HasForms, HasTable
                     ]);
                 }),
         ];
+    }
+
+    private static function monthSelectionForm(): array
+    {
+        return [
+            Forms\Components\TextInput::make('year')
+                ->label('Anno')
+                ->numeric()
+                ->default(now()->year)
+                ->required(),
+            Forms\Components\Select::make('month')
+                ->label('Mese')
+                ->options([
+                    '1' => 'Gennaio',
+                    '2' => 'Febbraio',
+                    '3' => 'Marzo',
+                    '4' => 'Aprile',
+                    '5' => 'Maggio',
+                    '6' => 'Giugno',
+                    '7' => 'Luglio',
+                    '8' => 'Agosto',
+                    '9' => 'Settembre',
+                    '10' => 'Ottobre',
+                    '11' => 'Novembre',
+                    '12' => 'Dicembre',
+                ])
+                ->default((string) now()->month)
+                ->required(),
+        ];
+    }
+
+    private function excelUrl(): string
+    {
+        [$start] = $this->currentPeriodRange();
+
+        return route('reports.foglio-ore-excel', [
+            'year' => $start->year,
+            'month' => $start->month,
+        ]);
     }
 
     protected function getFormSchema(): array

@@ -8,10 +8,12 @@ use Filament\Support\Assets\Js;
 use Illuminate\Support\Facades\File;
 
 use App\Models\DgPunch;
+use App\Models\DgUserJustification;
 use App\Models\DgWorkSession;
 use Spatie\Activitylog\Models\Activity;
 
 use App\Observers\DgPunchObserver;
+use App\Observers\DgUserJustificationObserver;
 use App\Observers\DgWorkSessionObserver;
 use App\Observers\ActivityLogObserver;
 
@@ -22,6 +24,7 @@ class AppServiceProvider extends ServiceProvider
         // Observers
         DgPunch::observe(DgPunchObserver::class);
         DgWorkSession::observe(DgWorkSessionObserver::class);
+        DgUserJustification::observe(DgUserJustificationObserver::class);
         Activity::observe(ActivityLogObserver::class);
 
         // Filament assets via Vite, solo se manifest presente

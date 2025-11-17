@@ -14,6 +14,8 @@ class WorkSessionApprovalService
         $session->approval_status = WorkSessionApprovalStatus::APPROVED->value;
         $session->approved_at = now();
         $session->approved_by = $actor->getKey();
+        $session->rejected_at = null;
+        $session->rejected_by = null;
         $session->anomaly_flags = [];
         $session->save();
 
@@ -33,6 +35,8 @@ class WorkSessionApprovalService
         $session->approval_status = WorkSessionApprovalStatus::REJECTED->value;
         $session->rejected_at = now();
         $session->rejected_by = $actor->getKey();
+        $session->approved_at = null;
+        $session->approved_by = null;
 
         if ($reason) {
             $session->override_reason = $reason;

@@ -99,6 +99,12 @@ class DgWorkSessionObserver
             'session_date',
             'site_id',
             'resolved_site_id',
+            'overtime_minutes',
+            'extra_minutes',
+            'extra_reason',
+            'override_reason',
+            'override_set_by',
+            'status',
         ];
 
         if (! $session->isDirty($approvalSensitive)) {
@@ -114,12 +120,18 @@ class DgWorkSessionObserver
             $session->approval_status = WorkSessionApprovalStatus::IN_REVIEW->value;
             $session->approved_at = null;
             $session->approved_by = null;
+            $session->rejected_at = null;
+            $session->rejected_by = null;
 
             return;
         }
 
         if ($original !== WorkSessionApprovalStatus::IN_REVIEW->value) {
             $session->approval_status = WorkSessionApprovalStatus::PENDING->value;
+            $session->approved_at = null;
+            $session->approved_by = null;
+            $session->rejected_at = null;
+            $session->rejected_by = null;
         }
     }
 }

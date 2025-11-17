@@ -68,6 +68,7 @@ class AnomaliesPieChart extends ChartWidget
             'absence' => 'Assenza',
             'overtime' => 'Straordinario',
             'unplanned_day' => 'Giorno non pianificato',
+            'irregular_session' => 'Sessione irregolare',
             default => ucfirst(str_replace('_', ' ', $type ?? 'Altro')),
         };
     }

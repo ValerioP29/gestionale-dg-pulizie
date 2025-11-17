@@ -8,12 +8,14 @@ use App\Models\DgReportCache;
 use App\Models\DgSiteAssignment;
 use App\Models\DgWorkSession;
 use App\Models\User;
+use App\Services\Justifications\JustificationCalendar;
 use App\Support\ReportsCacheStatus;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
@@ -38,6 +40,8 @@ class GenerateReportsCache implements ShouldQueue
             'source' => $this->periodStart && $this->periodEnd ? 'manual' : 'auto',
             'records' => 0,
         ]);
+
+        $calendar = new JustificationCalendar();
 
         try {
             $sessions = DgWorkSession::query()
@@ -123,7 +127,16 @@ class GenerateReportsCache implements ShouldQueue
                     $earlyExits = (clone $anomaliesQuery)->where('type', 'early_exit')->count();
                     $absencesAnomalies = (clone $anomaliesQuery)->where('type', 'absence')->count();
 
-                    $contractAbsences = max(0, $expectedDays - $daysPresent);
+                    $justifiedDays = $this->countJustifiedDaysForSite(
+                        $calendar,
+                        $userId,
+                        $start->copy(),
+                        $end->copy(),
+                        $assignments->get($siteId, collect()),
+                        $sitesForUser
+                    );
+
+                    $contractAbsences = max(0, $expectedDays - $daysPresent - $justifiedDays);
                     $daysAbsent = max($absencesAnomalies, $contractAbsences);
 
                     DgReportCache::updateOrCreate(
@@ -359,5 +372,63 @@ class GenerateReportsCache implements ShouldQueue
         $value = (float) ($schedule->{$dayKey} ?? 0);
 
         return $value > 0;
+    }
+
+    private function countJustifiedDaysForSite(
+        JustificationCalendar $calendar,
+        int $userId,
+        Carbon $start,
+        Carbon $end,
+        Collection $assignments,
+        int $sitesForUser,
+    ): int {
+        $covered = 0;
+        $cursor = $start->copy();
+
+        while ($cursor->lte($end)) {
+            $date = CarbonImmutable::parse($cursor->toDateString());
+
+            if (! $calendar->hasFullDayCoverage($userId, $date)) {
+                $cursor->addDay();
+                continue;
+            }
+
+            if ($this->isAssignedToSiteOn($date, $assignments, $sitesForUser)) {
+                $covered++;
+            }
+
+            $cursor->addDay();
+        }
+
+        return $covered;
+    }
+
+    private function isAssignedToSiteOn(
+        CarbonImmutable $date,
+        Collection $assignments,
+        int $sitesForUser,
+    ): bool {
+        if ($assignments->isEmpty()) {
+            return $sitesForUser <= 1;
+        }
+
+        return $assignments->contains(function ($assignment) use ($date) {
+            $from = $assignment->assigned_from
+                ? CarbonImmutable::parse($assignment->assigned_from)->startOfDay()
+                : null;
+            $to = $assignment->assigned_to
+                ? CarbonImmutable::parse($assignment->assigned_to)->endOfDay()
+                : null;
+
+            if ($from && $date->lt($from)) {
+                return false;
+            }
+
+            if ($to && $date->gt($to)) {
+                return false;
+            }
+
+            return true;
+        });
     }
 }

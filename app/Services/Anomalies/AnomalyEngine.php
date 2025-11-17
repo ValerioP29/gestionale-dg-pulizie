@@ -4,14 +4,16 @@ namespace App\Services\Anomalies;
 
 use App\Models\{DgAnomaly, DgWorkSession, DgContractSchedule, User};
 use App\Services\Anomalies\Rules\{
-    AnomalyRule,
-    MissingPunchRule,
     AbsenceRule,
-    UnplannedDayRule,
+    AnomalyRule,
+    IrregularSessionRule,
     LateEarlyRule,
-    OvertimeRule
+    MissingPunchRule,
+    OvertimeRule,
+    UnplannedDayRule
 };
 use App\Services\Anomalies\Support\ContractDayDTO;
+use App\Services\Justifications\JustificationCalendar;
 use App\Support\ReportsCacheRegenerator;
 use Illuminate\Support\Facades\DB;
 use Carbon\CarbonImmutable;
@@ -21,6 +23,8 @@ class AnomalyEngine
     /** @var array<int, AnomalyRule> */
     protected array $rules;
 
+    protected JustificationCalendar $calendar;
+
     /** @var string[] */
     private array $calculatedTypes = [
         'missing_punch',
@@ -29,19 +33,23 @@ class AnomalyEngine
         'unplanned_day',
         'late_entry',
         'early_exit',
+        'irregular_session',
     ];
 
     /** @var string[] */
     private array $managedStatuses = ['approved', 'rejected', 'justified', 'managed'];
 
-    public function __construct()
+    public function __construct(?JustificationCalendar $calendar = null)
     {
+        $this->calendar = $calendar ?? new JustificationCalendar();
+
         $this->rules = [
             new MissingPunchRule(),
-            new AbsenceRule(),
+            new AbsenceRule($this->calendar),
             new UnplannedDayRule(),
             new LateEarlyRule(),
             new OvertimeRule(),
+            new IrregularSessionRule(),
         ];
     }
 
