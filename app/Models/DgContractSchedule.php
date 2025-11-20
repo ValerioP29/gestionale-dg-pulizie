@@ -15,6 +15,7 @@ class DgContractSchedule extends Model
         'name',
         'mon','tue','wed','thu','fri','sat','sun',
         'contract_hours_monthly',
+        'break_minutes',
         'rules',
         'active',
     ];
@@ -29,6 +30,7 @@ class DgContractSchedule extends Model
         'fri' => 'float',
         'sat' => 'float',
         'sun' => 'float',
+        'break_minutes' => 'integer',
     ];
 
     public function users()
