@@ -177,18 +177,20 @@ class AnomalyEngine
         $map = ['mon','tue','wed','thu','fri','sat','sun'];
         $dayKey = $map[$weekday] ?? 'mon';
 
-        $user = User::select(['id','contract_schedule_id'])->find($userId);
-        if (!$user || !$user->contract_schedule_id) return null;
+        $user = User::with('contractSchedule:id,mon,tue,wed,thu,fri,sat,sun,rules,contract_hours_monthly,break_minutes')
+            ->select(['id','contract_schedule_id'])
+            ->find($userId);
 
-        $schedule = DgContractSchedule::find($user->contract_schedule_id);
-        if (!$schedule) return null;
+        $schedule = $user?->contractSchedule;
+
+        if (!$user || !$schedule) return null;
 
         // 1) Se esiste il JSON rules
         if (!empty($schedule->rules[$dayKey])) {
             $r = $schedule->rules[$dayKey];
             $start = ($r['start'] ?? '08:00').':00';
             $end   = ($r['end']   ?? '12:00').':00';
-            $break = (int)($r['break'] ?? 0);
+            $break = (int)($r['break'] ?? ($schedule->break_minutes ?? 0));
 
             return new ContractDayDTO(
                 weekday: $weekday,
@@ -209,7 +211,7 @@ class AnomalyEngine
             weekday: $weekday,
             expectedStart: $start,
             expectedEnd: $end,
-            breakMinutes: 0
+            breakMinutes: (int) ($schedule->break_minutes ?? 0)
         );
     }
 
