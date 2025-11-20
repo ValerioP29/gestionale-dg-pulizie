@@ -145,6 +145,10 @@ class GenerateWorkSessions implements ShouldQueue
         if (isset($userRules[$dayKey])) {
             $rule = $userRules[$dayKey];
             if (is_array($rule)) {
+                if (($rule['enabled'] ?? true) === false) {
+                    return false;
+                }
+
                 if (!empty($rule['start']) && !empty($rule['end'])) {
                     return true;
                 }
@@ -156,32 +160,6 @@ class GenerateWorkSessions implements ShouldQueue
             }
         }
 
-        if ((float) ($user->{$dayKey} ?? 0) > 0) {
-            return true;
-        }
-
-        $schedule = $user->contractSchedule;
-        if ($schedule) {
-            $scheduleRules = $schedule->rules ?? [];
-            if (isset($scheduleRules[$dayKey])) {
-                $rule = $scheduleRules[$dayKey];
-                if (is_array($rule)) {
-                    if (!empty($rule['start']) && !empty($rule['end'])) {
-                        return true;
-                    }
-                    if (isset($rule['hours']) && (float) $rule['hours'] > 0) {
-                        return true;
-                    }
-                } elseif ((float) $rule > 0) {
-                    return true;
-                }
-            }
-
-            if ((float) ($schedule->{$dayKey} ?? 0) > 0) {
-                return true;
-            }
-        }
-
-        return false;
+        return (float) ($user->{$dayKey} ?? 0) > 0;
     }
 }

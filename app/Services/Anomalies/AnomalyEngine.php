@@ -2,7 +2,7 @@
 
 namespace App\Services\Anomalies;
 
-use App\Models\{DgAnomaly, DgWorkSession, DgContractSchedule, User};
+use App\Models\{DgAnomaly, DgWorkSession, User};
 use App\Services\Anomalies\Rules\{
     AbsenceRule,
     AnomalyRule,
@@ -177,41 +177,47 @@ class AnomalyEngine
         $map = ['mon','tue','wed','thu','fri','sat','sun'];
         $dayKey = $map[$weekday] ?? 'mon';
 
-        $user = User::with('contractSchedule:id,mon,tue,wed,thu,fri,sat,sun,rules,contract_hours_monthly,break_minutes')
-            ->select(['id','contract_schedule_id'])
+        $user = User::with('contractSchedule:id,break_minutes,rules')
+            ->select(['id','contract_schedule_id','mon','tue','wed','thu','fri','sat','sun','rules'])
             ->find($userId);
 
-        $schedule = $user?->contractSchedule;
-
-        if (!$user || !$schedule) return null;
-
-        // 1) Se esiste il JSON rules
-        if (!empty($schedule->rules[$dayKey])) {
-            $r = $schedule->rules[$dayKey];
-            $start = ($r['start'] ?? '08:00').':00';
-            $end   = ($r['end']   ?? '12:00').':00';
-            $break = (int)($r['break'] ?? ($schedule->break_minutes ?? 0));
-
-            return new ContractDayDTO(
-                weekday: $weekday,
-                expectedStart: $start,
-                expectedEnd: $end,
-                breakMinutes: $break
-            );
+        if (! $user) {
+            return null;
         }
 
-        // 2) Fallback alle colonne fisiche (mon/tue/wed…)
-        $hours = $schedule->{$dayKey} ?? 0;
-        if ($hours <= 0) return null;
+        $dayHours = (float) ($user->{$dayKey} ?? 0);
 
-        $start = '08:00:00';
-        $end   = (CarbonImmutable::parse($start)->addHours($hours))->format('H:i:s');
+        if ($dayHours <= 0) {
+            return null;
+        }
+
+        $ruleSet = $user->rules ?? [];
+        $schedule = $user->contractSchedule;
+
+        if (empty($ruleSet[$dayKey]) && $schedule && ! empty($schedule->rules[$dayKey])) {
+            $ruleSet[$dayKey] = $schedule->rules[$dayKey];
+        }
+
+        $rule = $ruleSet[$dayKey] ?? [];
+
+        $start = ($rule['start'] ?? '08:00') . ':00';
+        $end = ($rule['end'] ?? null);
+
+        if ($end) {
+            $end = trim($end);
+            $end = str_contains($end, ':') ? $end : $end . ':00';
+        } else {
+            $end = CarbonImmutable::parse($start)->addHours($dayHours)->format('H:i:s');
+        }
+
+        $breakMinutes = (int) ($rule['break'] ?? $rule['break_minutes'] ?? $schedule?->break_minutes ?? 0);
 
         return new ContractDayDTO(
             weekday: $weekday,
             expectedStart: $start,
             expectedEnd: $end,
-            breakMinutes: (int) ($schedule->break_minutes ?? 0)
+            breakMinutes: $breakMinutes,
+            expectedMinutes: (int) round($dayHours * 60)
         );
     }
 
