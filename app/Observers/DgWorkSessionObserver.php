@@ -48,6 +48,13 @@ class DgWorkSessionObserver
             // Timestamp diff per ignorare buchi DST e TZ “naive”
             $minutes = intdiv($out->getTimestamp() - $in->getTimestamp(), 60);
 
+            $contract = ($session->relationLoaded('user') ? $session->user : $session->user()->with('contractSchedule')->first())?->contractSchedule;
+            $breakMinutes = $contract?->break_minutes;
+
+            if (! is_null($breakMinutes)) {
+                $minutes = max(0, $minutes - (int) $breakMinutes);
+            }
+
             // Clamp anti-spazzatura
             if ($minutes < 0) $minutes = 0;
             if ($minutes > 18 * 60) $minutes = 18 * 60;
