@@ -8,6 +8,7 @@ use App\Services\Anomalies\AnomalyEngine;
 use App\Services\SiteResolverService;
 use App\Support\ReportsCacheRegenerator;
 use Carbon\Carbon;
+use Illuminate\Support\Arr;
 
 class DgWorkSessionObserver
 {
@@ -48,12 +49,9 @@ class DgWorkSessionObserver
             // Timestamp diff per ignorare buchi DST e TZ “naive”
             $minutes = intdiv($out->getTimestamp() - $in->getTimestamp(), 60);
 
-            $contract = ($session->relationLoaded('user') ? $session->user : $session->user()->with('contractSchedule')->first())?->contractSchedule;
-            $breakMinutes = $contract?->break_minutes;
+            $breakMinutes = $this->resolveBreakMinutes($session);
 
-            if (! is_null($breakMinutes)) {
-                $minutes = max(0, $minutes - (int) $breakMinutes);
-            }
+            $minutes = max(0, $minutes - $breakMinutes);
 
             // Clamp anti-spazzatura
             if ($minutes < 0) $minutes = 0;
@@ -140,5 +138,30 @@ class DgWorkSessionObserver
             $session->rejected_at = null;
             $session->rejected_by = null;
         }
+    }
+
+    private function resolveBreakMinutes(DgWorkSession $session): int
+    {
+        $user = $session->relationLoaded('user')
+            ? $session->user
+            : $session->user()->with('contractSchedule')->first();
+
+        if (! $user || ! $session->session_date) {
+            return 0;
+        }
+
+        $weekday = Carbon::parse($session->session_date)->dayOfWeekIso - 1;
+        $map = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+        $dayKey = $map[$weekday] ?? 'mon';
+
+        $rules = $user->rules ?? [];
+
+        if (empty($rules[$dayKey]) && $user->contractSchedule) {
+            $rules[$dayKey] = $user->contractSchedule->rules[$dayKey] ?? [];
+        }
+
+        $dayRule = Arr::wrap($rules[$dayKey] ?? []);
+
+        return (int) ($dayRule['break'] ?? $dayRule['break_minutes'] ?? $user->contractSchedule?->break_minutes ?? 0);
     }
 }

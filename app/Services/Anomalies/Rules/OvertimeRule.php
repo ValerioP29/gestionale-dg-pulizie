@@ -19,8 +19,13 @@ class OvertimeRule implements AnomalyRule
 
         $expected = ExpectedShiftWindow::expectedMinutes($s, $c);
 
-        $worked = CarbonImmutable::parse($s->check_out)
-            ->diffInMinutes(CarbonImmutable::parse($s->check_in));
+        $worked = $s->worked_minutes ?? null;
+        if (is_null($worked)) {
+            $worked = CarbonImmutable::parse($s->check_out)
+                ->diffInMinutes(CarbonImmutable::parse($s->check_in));
+
+            $worked = max(0, $worked - $c->breakMinutes);
+        }
 
         $extra = max(0, $worked - $expected);
 

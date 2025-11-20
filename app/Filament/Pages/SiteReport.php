@@ -24,6 +24,7 @@ class SiteReport extends Page implements HasForms
     protected static ?string $navigationLabel = 'Report cantiere';
     protected static ?string $navigationGroup = 'Reportistica avanzata';
     protected static ?int $navigationSort = 51;
+    protected static ?string $title = 'Report cantiere';
     protected static string $view = 'filament.pages.site-report';
 
     public ?int $siteId = null;
@@ -88,15 +89,18 @@ class SiteReport extends Page implements HasForms
             Actions\Action::make('refresh')
                 ->label('Aggiorna report')
                 ->icon('heroicon-o-arrow-path')
-                ->action(fn () => $this->refreshReport()),
+                ->action(fn () => $this->refreshReport())
+                ->disabled(fn () => ! $this->siteId),
             Actions\Action::make('downloadCsv')
                 ->label('Esporta CSV')
                 ->icon('heroicon-o-arrow-down-tray')
-                ->action(fn () => $this->downloadCsv()),
+                ->action(fn () => $this->downloadCsv())
+                ->disabled(fn () => ! $this->siteId),
             Actions\Action::make('downloadXlsx')
                 ->label('Esporta XLSX')
                 ->icon('heroicon-o-document-arrow-down')
-                ->action(fn () => $this->downloadXlsx()),
+                ->action(fn () => $this->downloadXlsx())
+                ->disabled(fn () => ! $this->siteId),
         ];
     }
 

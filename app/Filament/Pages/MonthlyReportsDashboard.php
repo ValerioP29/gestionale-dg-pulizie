@@ -30,6 +30,7 @@ class MonthlyReportsDashboard extends Page implements HasForms, HasTable
     protected static ?string $navigationLabel = 'Dashboard report mensili';
     protected static ?string $navigationGroup = 'Gestione Cantieri';
     protected static ?int $navigationSort = 45;
+    protected static ?string $title = 'Report Mensile';
     protected static string $view = 'filament.pages.monthly-reports-dashboard';
 
     public ?string $period = null;

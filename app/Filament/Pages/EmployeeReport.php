@@ -24,6 +24,7 @@ class EmployeeReport extends Page implements HasForms
     protected static ?string $navigationLabel = 'Report dipendente';
     protected static ?string $navigationGroup = 'Reportistica avanzata';
     protected static ?int $navigationSort = 50;
+    protected static ?string $title = 'Report dipendente';
     protected static string $view = 'filament.pages.employee-report';
 
     public ?int $userId = null;
@@ -99,17 +100,20 @@ class EmployeeReport extends Page implements HasForms
             Actions\Action::make('refresh')
                 ->label('Aggiorna report')
                 ->icon('heroicon-o-arrow-path')
-                ->action(fn () => $this->refreshReport()),
+                ->action(fn () => $this->refreshReport())
+                ->disabled(fn () => ! $this->userId),
             Actions\Action::make('downloadCsv')
                 ->label('Esporta CSV')
                 ->icon('heroicon-o-arrow-down-tray')
                 ->action(fn () => $this->downloadCsv())
-                ->requiresConfirmation(false),
+                ->requiresConfirmation(false)
+                ->disabled(fn () => ! $this->userId),
             Actions\Action::make('downloadXlsx')
                 ->label('Esporta XLSX')
                 ->icon('heroicon-o-document-arrow-down')
                 ->action(fn () => $this->downloadXlsx())
-                ->requiresConfirmation(false),
+                ->requiresConfirmation(false)
+                ->disabled(fn () => ! $this->userId),
         ];
     }
 

@@ -26,6 +26,10 @@ class ExpectedShiftWindow
 
     public static function expectedMinutes(DgWorkSession $session, ContractDayDTO $contract): int
     {
+        if (! is_null($contract->expectedMinutes)) {
+            return max(0, (int) $contract->expectedMinutes);
+        }
+
         [$start, $end] = self::resolve($session, $contract);
         $minutes = $end->diffInMinutes($start) - $contract->breakMinutes;
 

@@ -3,7 +3,6 @@
 namespace App\Jobs;
 
 use App\Models\DgAnomaly;
-use App\Models\DgContractSchedule;
 use App\Models\DgReportCache;
 use App\Models\DgSiteAssignment;
 use App\Models\DgWorkSession;
@@ -79,8 +78,8 @@ class GenerateReportsCache implements ShouldQueue
             }
 
             $userIds = $grouped->keys()->all();
-            $contracts = $this->loadContracts($userIds);
-            $contractWorkingDays = $this->calculateContractWorkingDays($contracts, $start, $end);
+            $users = $this->loadUsers($userIds);
+            $contractWorkingDays = $this->calculateUserWorkingDays($users, $start, $end);
             $assignments = $this->loadAssignments($userIds, $start, $end);
 
             $processed = 0;
@@ -100,13 +99,13 @@ class GenerateReportsCache implements ShouldQueue
                         ->unique()
                         ->count();
 
-                    $contractSchedule = $contracts[$userId] ?? null;
+                    $user = $users[$userId] ?? null;
                     $sitesForUser = $bySite->keys()->count();
                     $assignmentSet = $assignments->get($userId, collect())->get($siteId, collect());
                     $expectedDays = $this->calculateExpectedDaysForSite(
                         $start->copy(),
                         $end->copy(),
-                        $contractSchedule,
+                        $user,
                         $assignmentSet,
                         $sitesForUser,
                         $daysPresent,
@@ -206,7 +205,7 @@ class GenerateReportsCache implements ShouldQueue
         return [$start, $end];
     }
 
-    private function loadContracts(array $userIds): Collection
+    private function loadUsers(array $userIds): Collection
     {
         if (empty($userIds)) {
             return collect();
@@ -216,16 +215,16 @@ class GenerateReportsCache implements ShouldQueue
             ->with('contractSchedule')
             ->whereIn('id', $userIds)
             ->get()
-            ->mapWithKeys(fn ($user) => [$user->id => $user->contractSchedule]);
+            ->mapWithKeys(fn ($user) => [$user->id => $user]);
     }
 
-    private function calculateContractWorkingDays(Collection $contracts, Carbon $start, Carbon $end): array
+    private function calculateUserWorkingDays(Collection $users, Carbon $start, Carbon $end): array
     {
         $result = [];
 
-        foreach ($contracts as $id => $contract) {
-            $result[$id] = $contract
-                ? $this->countContractWorkingDays($start->copy(), $end->copy(), $contract)
+        foreach ($users as $id => $user) {
+            $result[$id] = $user
+                ? $this->countUserWorkingDays($start->copy(), $end->copy(), $user)
                 : 0;
         }
 
@@ -252,7 +251,7 @@ class GenerateReportsCache implements ShouldQueue
             ->groupBy(['user_id', 'site_id']);
     }
 
-    private function countContractWorkingDays(Carbon $start, Carbon $end, DgContractSchedule $schedule): int
+    private function countUserWorkingDays(Carbon $start, Carbon $end, User $user): int
     {
         $days = 0;
         $cursor = $start->copy();
@@ -260,7 +259,7 @@ class GenerateReportsCache implements ShouldQueue
         while ($cursor->lte($end)) {
             $weekday = $cursor->dayOfWeekIso - 1;
 
-            if ($this->isWorkingDay($schedule, $weekday)) {
+            if ($this->isWorkingDay($user, $weekday)) {
                 $days++;
             }
 
@@ -273,18 +272,18 @@ class GenerateReportsCache implements ShouldQueue
     private function calculateExpectedDaysForSite(
         Carbon $start,
         Carbon $end,
-        ?DgContractSchedule $schedule,
+        ?User $user,
         Collection $assignments,
         int $siteCount,
         int $daysPresent,
         int $fallbackTotal,
     ): int {
-        if (! $schedule) {
+        if (! $user) {
             return max($daysPresent, 0);
         }
 
         if ($assignments->isNotEmpty()) {
-            return $this->calculateDaysWithAssignments($start->copy(), $end->copy(), $schedule, $assignments);
+            return $this->calculateDaysWithAssignments($start->copy(), $end->copy(), $user, $assignments);
         }
 
         if ($siteCount > 1) {
@@ -297,7 +296,7 @@ class GenerateReportsCache implements ShouldQueue
     private function calculateDaysWithAssignments(
         Carbon $start,
         Carbon $end,
-        DgContractSchedule $schedule,
+        User $user,
         Collection $assignments,
     ): int {
         $ranges = $assignments->map(function ($assignment) {
@@ -317,7 +316,7 @@ class GenerateReportsCache implements ShouldQueue
         while ($cursor->lte($end)) {
             $weekday = $cursor->dayOfWeekIso - 1;
 
-            if (! $this->isWorkingDay($schedule, $weekday)) {
+            if (! $this->isWorkingDay($user, $weekday)) {
                 $cursor->addDay();
                 continue;
             }
@@ -347,12 +346,13 @@ class GenerateReportsCache implements ShouldQueue
         return $expected;
     }
 
-    private function isWorkingDay(DgContractSchedule $schedule, int $weekday): bool
+    private function isWorkingDay(User $user, int $weekday): bool
     {
         $map = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
         $dayKey = $map[$weekday] ?? 'mon';
 
-        $rules = $schedule->rules ?? [];
+        $rules = $user->rules ?? [];
+
         if (array_key_exists($dayKey, $rules)) {
             $rule = $rules[$dayKey] ?? [];
 
@@ -369,7 +369,7 @@ class GenerateReportsCache implements ShouldQueue
             }
         }
 
-        $value = (float) ($schedule->{$dayKey} ?? 0);
+        $value = (float) ($user->{$dayKey} ?? 0);
 
         return $value > 0;
     }
