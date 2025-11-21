@@ -83,20 +83,25 @@ class ClientReport extends Page implements HasForms
             Actions\Action::make('refresh')
                 ->label('Aggiorna report')
                 ->icon('heroicon-o-arrow-path')
-                ->action(fn () => $this->refreshReport()),
+                ->action(fn () => $this->refreshReport())
+                ->disabled(fn () => ! $this->hasRequiredFilters()),
             Actions\Action::make('downloadCsv')
                 ->label('Esporta CSV')
                 ->icon('heroicon-o-arrow-down-tray')
-                ->action(fn () => $this->downloadCsv()),
+                ->action(fn () => $this->downloadCsv())
+                ->disabled(fn () => ! $this->hasRequiredFilters()),
             Actions\Action::make('downloadXlsx')
                 ->label('Esporta XLSX')
                 ->icon('heroicon-o-document-arrow-down')
-                ->action(fn () => $this->downloadXlsx()),
+                ->action(fn () => $this->downloadXlsx())
+                ->disabled(fn () => ! $this->hasRequiredFilters()),
         ];
     }
 
     public function refreshReport(): void
     {
+        $this->syncFormState();
+
         if (! $this->clientId) {
             $this->resetReport();
             Notification::make()->title('Seleziona un cliente')->warning()->send();
@@ -117,6 +122,8 @@ class ClientReport extends Page implements HasForms
 
     public function downloadCsv()
     {
+        $this->syncFormState();
+
         if (! $this->clientId) {
             Notification::make()->title('Seleziona un cliente')->warning()->send();
 
@@ -158,6 +165,8 @@ class ClientReport extends Page implements HasForms
 
     public function downloadXlsx()
     {
+        $this->syncFormState();
+
         if (! $this->clientId) {
             Notification::make()->title('Seleziona un cliente')->warning()->send();
 
@@ -184,6 +193,25 @@ class ClientReport extends Page implements HasForms
             ],
             'rows' => collect(),
         ];
+    }
+
+    private function syncFormState(): void
+    {
+        $state = $this->form->getState();
+
+        $this->clientId = filled($state['client_id'] ?? null)
+            ? (int) $state['client_id']
+            : null;
+
+        $this->dateFrom = $state['date_from'] ?? $this->dateFrom;
+        $this->dateTo = $state['date_to'] ?? $this->dateTo;
+    }
+
+    private function hasRequiredFilters(): bool
+    {
+        $this->syncFormState();
+
+        return (bool) $this->clientId;
     }
 
     private function resolvedRange(): array

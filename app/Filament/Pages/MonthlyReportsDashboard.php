@@ -2,10 +2,11 @@
 
 namespace App\Filament\Pages;
 
+use App\Exports\MonthlyHoursExport;
 use App\Jobs\GenerateReportsCache as GenerateReportsCacheJob;
-use App\Models\DgAnomaly;
 use App\Models\DgReportCache;
 use App\Support\ReportsCacheStatus;
+use Carbon\CarbonImmutable;
 use Filament\Actions;
 use Filament\Forms;
 use Filament\Forms\Concerns\InteractsWithForms;
@@ -16,10 +17,8 @@ use Filament\Tables;
 use Filament\Tables\Concerns\InteractsWithTable;
 use Filament\Tables\Contracts\HasTable;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\Arr;
-use Carbon\CarbonImmutable;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
+use Maatwebsite\Excel\Facades\Excel;
 
 class MonthlyReportsDashboard extends Page implements HasForms, HasTable
 {
@@ -143,76 +142,19 @@ class MonthlyReportsDashboard extends Page implements HasForms, HasTable
                         ->send();
                 }),
             Actions\Action::make('downloadCsv')
-                ->label('Scarica CSV')
+                ->label('Scarica Excel')
                 ->icon('heroicon-o-arrow-down-tray')
                 ->action(function () {
-                    [$start, $end] = $this->currentPeriodRange();
+                    [$start] = $this->currentPeriodRange();
 
-                    $reports = $this->buildMonthlyQuery($start, $end)
-                        ->with(['user', 'resolvedSite', 'site'])
-                        ->orderBy('user_id')
-                        ->orderBy('resolved_site_id')
-                        ->get();
-
-                    if ($reports->isEmpty()) {
-                        Notification::make()
-                            ->title('Nessun dato disponibile')
-                            ->warning()
-                            ->body('Non ci sono report da esportare per il periodo selezionato.')
-                            ->send();
-
-                        return null;
-                    }
-
-                    $userIds = $reports->pluck('user_id')->filter()->unique()->values()->all();
-                    $notesByUser = $this->collectAnomalyNotes($userIds, $start, $end);
-
-                    $fileName = sprintf(
-                        'report_%s_%d.csv',
-                        Str::slug($start->translatedFormat('F'), '_'),
-                        $start->year
+                    return Excel::download(
+                        new MonthlyHoursExport($start->year, $start->month),
+                        sprintf(
+                            'report_%s_%d.xlsx',
+                            Str::slug($start->translatedFormat('F'), '_'),
+                            $start->year,
+                        ),
                     );
-
-                    return response()->streamDownload(function () use ($reports, $notesByUser, $start) {
-                        $handle = fopen('php://output', 'w');
-
-                        fputcsv($handle, [
-                            'user',
-                            'site',
-                            'ore_lavorate',
-                            'assenze',
-                            'straordinari',
-                            'giorni_lavorati',
-                            'mese',
-                            'note_anomalie',
-                        ]);
-
-                        $monthLabel = $start->translatedFormat('F Y');
-
-                        foreach ($reports as $report) {
-                            $siteName = $report->resolvedSite?->name
-                                ?? $report->site?->name
-                                ?? '—';
-
-                            $overtimeHours = round(($report->overtime_minutes ?? 0) / 60, 2);
-                            $notes = $notesByUser[$report->user_id] ?? '';
-
-                            fputcsv($handle, [
-                                $report->user?->name ?? $report->user?->full_name ?? '—',
-                                $siteName,
-                                number_format((float) $report->worked_hours, 2, ',', '.'),
-                                (int) $report->days_absent,
-                                number_format($overtimeHours, 2, ',', '.'),
-                                (int) $report->days_present,
-                                $monthLabel,
-                                $notes,
-                            ]);
-                        }
-
-                        fclose($handle);
-                    }, $fileName, [
-                        'Content-Type' => 'text/csv; charset=UTF-8',
-                    ]);
                 }),
         ];
     }
@@ -396,79 +338,5 @@ class MonthlyReportsDashboard extends Page implements HasForms, HasTable
         return DgReportCache::query()
             ->whereBetween('period_start', [$start->toDateString(), $end->toDateString()])
             ->whereBetween('period_end', [$start->toDateString(), $end->toDateString()]);
-    }
-
-    protected function collectAnomalyNotes(array $userIds, CarbonImmutable $start, CarbonImmutable $end): array
-    {
-        if ($userIds === []) {
-            return [];
-        }
-
-        $notesFromAnomalies = DgAnomaly::query()
-            ->whereIn('user_id', $userIds)
-            ->whereBetween('date', [$start->toDateString(), $end->toDateString()])
-            ->get(['user_id', 'note'])
-            ->groupBy('user_id')
-            ->map(fn (Collection $items) => $items
-                ->pluck('note')
-                ->filter()
-                ->map(fn ($note) => $this->normalizeNote($note))
-                ->filter()
-                ->unique()
-                ->values()
-                ->all()
-            );
-
-        $notesFromResolvedSites = DgReportCache::query()
-            ->whereBetween('period_start', [$start->toDateString(), $end->toDateString()])
-            ->whereBetween('period_end', [$start->toDateString(), $end->toDateString()])
-            ->whereIn('user_id', $userIds)
-            ->get(['user_id', 'anomaly_flags'])
-            ->groupBy('user_id')
-            ->map(function (Collection $items) {
-                return $items
-                    ->flatMap(fn ($item) => Arr::wrap($item->anomaly_flags))
-                    ->map(function ($flag) {
-                        if (is_array($flag)) {
-                            return $this->normalizeNote($flag['note'] ?? $flag['message'] ?? null);
-                        }
-
-                        return $this->normalizeNote($flag);
-                    })
-                    ->filter()
-                    ->unique()
-                    ->values()
-                    ->all();
-            });
-
-        $merged = [];
-
-        foreach ($userIds as $userId) {
-            $notes = collect([
-                $notesFromAnomalies->get($userId, []),
-                $notesFromResolvedSites->get($userId, []),
-            ])
-                ->flatten()
-                ->filter()
-                ->unique()
-                ->implode(' | ');
-
-            if ($notes !== '') {
-                $merged[$userId] = $notes;
-            }
-        }
-
-        return $merged;
-    }
-
-    protected function normalizeNote($note): ?string
-    {
-        if ($note === null) {
-            return null;
-        }
-
-        $normalized = trim(preg_replace('/\s+/u', ' ', (string) $note) ?? '');
-
-        return $normalized !== '' ? $normalized : null;
     }
 }

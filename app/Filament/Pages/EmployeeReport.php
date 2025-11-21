@@ -100,22 +100,27 @@ class EmployeeReport extends Page implements HasForms
             Actions\Action::make('refresh')
                 ->label('Aggiorna report')
                 ->icon('heroicon-o-arrow-path')
-                ->action(fn () => $this->refreshReport()),
+                ->action(fn () => $this->refreshReport())
+                ->disabled(fn () => ! $this->hasRequiredFilters()),
             Actions\Action::make('downloadCsv')
                 ->label('Esporta CSV')
                 ->icon('heroicon-o-arrow-down-tray')
                 ->action(fn () => $this->downloadCsv())
-                ->requiresConfirmation(false),
+                ->requiresConfirmation(false)
+                ->disabled(fn () => ! $this->hasRequiredFilters()),
             Actions\Action::make('downloadXlsx')
                 ->label('Esporta XLSX')
                 ->icon('heroicon-o-document-arrow-down')
                 ->action(fn () => $this->downloadXlsx())
-                ->requiresConfirmation(false),
+                ->requiresConfirmation(false)
+                ->disabled(fn () => ! $this->hasRequiredFilters()),
         ];
     }
 
     public function refreshReport(): void
     {
+        $this->syncFormState();
+
         if (! $this->userId) {
             $this->resetReport();
             Notification::make()
@@ -140,6 +145,8 @@ class EmployeeReport extends Page implements HasForms
 
     public function downloadCsv()
     {
+        $this->syncFormState();
+
         if (! $this->userId) {
             Notification::make()
                 ->title('Seleziona un dipendente')
@@ -191,6 +198,8 @@ class EmployeeReport extends Page implements HasForms
 
     public function downloadXlsx()
     {
+        $this->syncFormState();
+
         if (! $this->userId) {
             Notification::make()
                 ->title('Seleziona un dipendente')
@@ -220,6 +229,25 @@ class EmployeeReport extends Page implements HasForms
             ],
             'rows' => collect(),
         ];
+    }
+
+    private function syncFormState(): void
+    {
+        $state = $this->form->getState();
+
+        $this->userId = filled($state['user_id'] ?? null)
+            ? (int) $state['user_id']
+            : null;
+
+        $this->dateFrom = $state['date_from'] ?? $this->dateFrom;
+        $this->dateTo = $state['date_to'] ?? $this->dateTo;
+    }
+
+    private function hasRequiredFilters(): bool
+    {
+        $this->syncFormState();
+
+        return (bool) $this->userId;
     }
 
     private function resolvedRange(): array
