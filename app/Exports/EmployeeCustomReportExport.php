@@ -38,7 +38,7 @@ class EmployeeCustomReportExport implements FromCollection, WithHeadings, WithTi
 
     public function headings(): array
     {
-        return ['Data', 'Cantiere', 'Ore', 'Straordinari', 'Stato', 'Anomalie'];
+        return ['Data', 'Cantiere', 'Ore lavorate', 'Straordinari', 'Stato', 'Anomalie'];
     }
 
     public function title(): string
