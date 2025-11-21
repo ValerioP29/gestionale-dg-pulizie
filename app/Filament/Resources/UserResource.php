@@ -178,6 +178,17 @@ class UserResource extends Resource
                     Forms\Components\TextInput::make('payroll_code')
                         ->label('Matricola')
                         ->maxLength(64),
+
+                    Forms\Components\Select::make('break_minutes')
+                        ->label('Pausa giornaliera')
+                        ->options([
+                            0 => 'Nessuna',
+                            30 => '30 minuti',
+                            60 => '1 ora',
+                            90 => '1.5 ore',
+                            120 => '2 ore',
+                        ])
+                        ->default(0),
                 ])
                 ->columns(2),
 
