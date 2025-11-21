@@ -59,30 +59,32 @@ class MonthlyCalendarSheet implements FromCollection, WithHeadings, WithTitle
         $rows = $rows instanceof Collection ? $rows : collect($rows);
 
         return $rows->map(function (array $row) {
-            $contractWeek = $row['contract_week'] ?? [];
 
+            $contract = $row['contract_week'] ?? [];
+
+            // === ORDINAMENTO BASE IDENTICO AL MODELLO ===
             $base = [
-                $row['tipologia'] ?? '',
-                $row['cliente_cod'] ?? '',
-                $row['site_cod'] ?? '',
-                $row['cliente_nome'] ?? '',
-                $row['cantiere'] ?? '',
-                $row['matricola'] ?? '',
-                $row['last_name'] ?? '',
-                $row['first_name'] ?? '',
-                $row['hired_at'] ?? '',
-                $row['end_at'] ?? '',
-                $row['contract_hours_monthly'] ?? '',
-                $contractWeek['mon'] ?? '',
-                $contractWeek['tue'] ?? '',
-                $contractWeek['wed'] ?? '',
-                $contractWeek['thu'] ?? '',
-                $contractWeek['fri'] ?? '',
-                $contractWeek['sat'] ?? '',
-                $contractWeek['sun'] ?? '',
+                $row['tipologia'],
+                $row['cliente_cod'],
+                $row['site_cod'],
+                $row['cliente_nome'],
+                $row['cantiere'],
+                $row['matricola'],
+                $row['last_name'],
+                $row['first_name'],
+                $row['hired_at'],
+                $row['end_at'],
+                $contract['mon'] ?? '',
+                $contract['tue'] ?? '',
+                $contract['wed'] ?? '',
+                $contract['thu'] ?? '',
+                $contract['fri'] ?? '',
+                $contract['sat'] ?? '',
+                $contract['sun'] ?? '',
                 $row['contract_week_total'] ?? '',
             ];
 
+            // giorni 1..31
             $days = [];
             for ($d = 1; $d <= 31; $d++) {
                 $days[] = $row['giorni'][$d] ?? '';
@@ -109,7 +111,6 @@ class MonthlyCalendarSheet implements FromCollection, WithHeadings, WithTitle
             'NOME',
             'DATA ASSUNZIONE',
             'DATA SCADENZA',
-            'ORE CONTRATTO (da user)',
             'LUNEDI',
             'MARTEDI',
             'MERCOLEDÌ',

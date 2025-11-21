@@ -119,7 +119,6 @@ class MonthlyHoursExport implements WithMultipleSheets
                 'cantiere' => $user->mainSite?->name ?? '',
                 'hired_at' => $user->hired_at?->format('d/m/Y') ?? '',
                 'end_at' => $user->contract_end_at?->format('d/m/Y') ?? '',
-                'contract_hours_monthly' => $user->contract_hours_monthly ?? '',
                 'contract_week' => $contractHours,
                 'contract_week_total' => round(array_sum($contractHours), 2),
                 'giorni' => $giorni,
