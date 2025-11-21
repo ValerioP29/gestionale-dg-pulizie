@@ -65,11 +65,19 @@ class MonthlyHoursExport implements WithMultipleSheets
             $sessions = $sessionsByUser->get($user->id, collect());
             $byDate = $sessions->keyBy(fn ($session) => CarbonImmutable::parse($session->session_date)->toDateString());
 
+            $contractHours = $this->contractHoursFor($user);
+
             $giorni = [];
             $total = 0.0;
             $overtime = 0.0;
 
-            for ($d = 1; $d <= $daysInMonth; $d++) {
+            for ($d = 1; $d <= 31; $d++) {
+                if ($d > $daysInMonth) {
+                    $giorni[$d] = '';
+
+                    continue;
+                }
+
                 $date = $this->start->day($d)->toDateString();
                 $session = $byDate->get($date);
                 $hours = $session ? round(($session->worked_minutes ?? 0) / 60, 2) : '';
@@ -86,9 +94,24 @@ class MonthlyHoursExport implements WithMultipleSheets
                 ->unique()
                 ->implode(', ');
 
+            $notesDetail = $anomaliesByUser->get($user->id, collect())
+                ->map(function (DgAnomaly $anomaly) {
+                    $label = $this->labelForAnomaly($anomaly->type);
+                    $note = trim((string) ($anomaly->note ?? ''));
+
+                    return $note !== ''
+                        ? sprintf('%s - %s', $label, $note)
+                        : $label;
+                })
+                ->filter()
+                ->implode("\n");
+
             return [
+                'tipologia' => 'Dipendente',
                 'user_id' => $user->id,
                 'utente' => $user->full_name,
+                'first_name' => $user->first_name ?? '',
+                'last_name' => $user->last_name ?? '',
                 'matricola' => $user->payroll_code,
                 'cliente_cod' => $user->mainSite?->client?->payroll_client_code ?? '',
                 'site_cod' => $user->mainSite?->payroll_site_code ?? '',
@@ -96,10 +119,14 @@ class MonthlyHoursExport implements WithMultipleSheets
                 'cantiere' => $user->mainSite?->name ?? '',
                 'hired_at' => $user->hired_at?->format('d/m/Y') ?? '',
                 'end_at' => $user->contract_end_at?->format('d/m/Y') ?? '',
+                'contract_hours_monthly' => $user->contract_hours_monthly ?? '',
+                'contract_week' => $contractHours,
+                'contract_week_total' => round(array_sum($contractHours), 2),
                 'giorni' => $giorni,
                 'total_hours' => round($total, 2),
                 'overtime_hours' => round($overtime, 2),
                 'notes' => $notes,
+                'notes_detail' => $notesDetail,
             ];
         })->values();
 
@@ -144,6 +171,28 @@ class MonthlyHoursExport implements WithMultipleSheets
         ];
     }
 
+    private function contractHoursFor(User $user): array
+    {
+        $days = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+        $hours = [];
+
+        foreach ($days as $day) {
+            $hours[$day] = (float) ($user->{$day} ?? 0);
+        }
+
+        if ($user->contractSchedule) {
+            $rules = $user->contractSchedule->rules ?? [];
+
+            foreach ($days as $day) {
+                if ($hours[$day] <= 0 && ! empty($rules[$day]['hours'])) {
+                    $hours[$day] = (float) $rules[$day]['hours'];
+                }
+            }
+        }
+
+        return $hours;
+    }
+
     private function labelForAnomaly(?string $type): string
     {
         return match ($type) {
@@ -154,6 +203,7 @@ class MonthlyHoursExport implements WithMultipleSheets
             'early_exit' => 'Uscita anticipata',
             'overtime' => 'Straordinario',
             'irregular_session' => 'Sessione irregolare',
+            'underwork' => 'Ore insufficienti',
             default => ucfirst((string) $type),
         };
     }

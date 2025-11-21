@@ -198,31 +198,7 @@ class DgWorkSessionResource extends Resource
             ])
             ->headerActions([
                 Tables\Actions\CreateAction::make()->visible(fn () => auth()->user()->isRole('admin')),
-            Tables\Actions\Action::make('scarica_foglio_ore')
-                 ->label('Scarica Foglio Ore Excel')
-                    ->icon('heroicon-o-table-cells')
-                    ->form([
-                        Forms\Components\TextInput::make('year')
-                            ->default(now()->year)
-                            ->numeric()
-                            ->required(),
-                        Forms\Components\Select::make('month')
-                            ->options([
-                                '1'=>'Gennaio','2'=>'Febbraio','3'=>'Marzo','4'=>'Aprile','5'=>'Maggio','6'=>'Giugno',
-                                '7'=>'Luglio','8'=>'Agosto','9'=>'Settembre','10'=>'Ottobre','11'=>'Novembre','12'=>'Dicembre',
-                            ])
-                            ->default(now()->month)
-                            ->required(),
-                    ])
-                    ->action(function ($data) {
-                        return redirect()->route('reports.foglio-ore-excel', [
-                            'year'  => $data['year'],
-                            'month' => $data['month'],
-                        ]);
-                    })
-                    ->visible(fn () => auth()->user()->hasAnyRole(['admin','supervisor'])),
-                            
-                    ])
+            ])
             ->bulkActions([
                 Tables\Actions\BulkAction::make('approva')
                     ->label('Approva selezionate')
