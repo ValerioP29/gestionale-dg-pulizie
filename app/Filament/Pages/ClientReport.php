@@ -12,8 +12,6 @@ use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
-use Illuminate\Support\Collection;
-use Illuminate\Support\Str;
 use Maatwebsite\Excel\Facades\Excel;
 
 class ClientReport extends Page implements HasForms
@@ -29,6 +27,7 @@ class ClientReport extends Page implements HasForms
     public ?int $clientId = null;
     public ?string $dateFrom = null;
     public ?string $dateTo = null;
+    public array $filters = [];
 
     /** @var array{client:?\App\Models\DgClient,summary:array,rows:Collection} */
     public array $report = [
@@ -53,6 +52,11 @@ class ClientReport extends Page implements HasForms
             'date_from' => $this->dateFrom,
             'date_to' => $this->dateTo,
         ]);
+    }
+
+    protected function getFormStatePath(): string
+    {
+        return 'filters';
     }
 
     protected function getFormSchema(): array
@@ -85,11 +89,6 @@ class ClientReport extends Page implements HasForms
                 ->icon('heroicon-o-arrow-path')
                 ->action(fn () => $this->refreshReport())
                 ->disabled(fn () => ! $this->hasRequiredFilters()),
-            Actions\Action::make('downloadCsv')
-                ->label('Esporta CSV')
-                ->icon('heroicon-o-arrow-down-tray')
-                ->action(fn () => $this->downloadCsv())
-                ->disabled(fn () => ! $this->hasRequiredFilters()),
             Actions\Action::make('downloadXlsx')
                 ->label('Esporta XLSX')
                 ->icon('heroicon-o-document-arrow-down')
@@ -118,49 +117,6 @@ class ClientReport extends Page implements HasForms
             'summary' => $data['summary'],
             'rows' => $data['rows'],
         ];
-    }
-
-    public function downloadCsv()
-    {
-        $this->syncFormState();
-
-        if (! $this->clientId) {
-            Notification::make()->title('Seleziona un cliente')->warning()->send();
-
-            return null;
-        }
-
-        if ($this->report['rows'] === null) {
-            $this->report['rows'] = collect();
-        }
-
-        $rows = $this->report['rows'] instanceof Collection
-            ? $this->report['rows']
-            : collect($this->report['rows']);
-
-        if ($rows->isEmpty()) {
-            $this->refreshReport();
-            $rows = $this->report['rows'];
-        }
-
-        $filename = sprintf('report_cliente_%s_%s.csv', Str::slug(optional($this->report['client'])->name ?? 'cliente', '_'), now()->format('Ymd_His'));
-
-        return response()->streamDownload(function () use ($rows) {
-            $handle = fopen('php://output', 'w');
-            fputcsv($handle, ['Cantiere', 'Ore', 'Straordinari', 'Giorni', 'Anomalie']);
-
-            foreach ($rows as $row) {
-                fputcsv($handle, [
-                    $row['site'],
-                    number_format((float) $row['hours'], 2, ',', '.'),
-                    number_format((float) $row['overtime'], 2, ',', '.'),
-                    $row['days'],
-                    $row['anomalies'],
-                ]);
-            }
-
-            fclose($handle);
-        }, $filename, ['Content-Type' => 'text/csv; charset=UTF-8']);
     }
 
     public function downloadXlsx()
@@ -205,6 +161,12 @@ class ClientReport extends Page implements HasForms
 
         $this->dateFrom = $state['date_from'] ?? $this->dateFrom;
         $this->dateTo = $state['date_to'] ?? $this->dateTo;
+
+        $this->form->fill([
+            'client_id' => $this->clientId,
+            'date_from' => $this->dateFrom,
+            'date_to' => $this->dateTo,
+        ]);
     }
 
     private function hasRequiredFilters(): bool

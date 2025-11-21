@@ -35,7 +35,7 @@ class SiteCustomReportExport implements FromCollection, WithHeadings, WithTitle
 
     public function headings(): array
     {
-        return ['Dipendente', 'Giorni', 'Ore', 'Straordinari', 'Anomalie'];
+        return ['Dipendente', 'Giorni lavorati', 'Ore lavorate', 'Straordinari', 'Anomalie'];
     }
 
     public function title(): string

@@ -35,7 +35,7 @@ class ClientCustomReportExport implements FromCollection, WithHeadings, WithTitl
 
     public function headings(): array
     {
-        return ['Cantiere', 'Ore', 'Straordinari', 'Giorni', 'Anomalie'];
+        return ['Cantiere', 'Ore lavorate', 'Straordinari', 'Giorni lavorati', 'Anomalie'];
     }
 
     public function title(): string
