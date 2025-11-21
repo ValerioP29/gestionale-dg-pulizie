@@ -6,4 +6,5 @@ return [
     'min_overtime_minutes' => env('ANOMALIES_MIN_OVERTIME_MINUTES', 30),
     'min_session_minutes' => env('ANOMALIES_MIN_SESSION_MINUTES', 15),
     'max_unpaid_break_minutes' => env('ANOMALIES_MAX_UNPAID_BREAK_MINUTES', 120),
+    'min_underwork_minutes' => env('ANOMALIES_MIN_UNDERWORK_MINUTES', 15),
 ];

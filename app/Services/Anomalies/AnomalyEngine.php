@@ -2,7 +2,7 @@
 
 namespace App\Services\Anomalies;
 
-use App\Models\{DgAnomaly, DgWorkSession, User};
+use App\Models\{DgAnomaly, DgPunch, DgWorkSession, User};
 use App\Services\Anomalies\Rules\{
     AbsenceRule,
     AnomalyRule,
@@ -10,6 +10,7 @@ use App\Services\Anomalies\Rules\{
     LateEarlyRule,
     MissingPunchRule,
     OvertimeRule,
+    UnderworkRule,
     UnplannedDayRule
 };
 use App\Services\Anomalies\Support\ContractDayDTO;
@@ -34,10 +35,20 @@ class AnomalyEngine
         'late_entry',
         'early_exit',
         'irregular_session',
+        'underwork',
     ];
 
     /** @var string[] */
     private array $managedStatuses = ['approved', 'rejected', 'justified', 'managed'];
+
+    /** @var array<int, CarbonImmutable> */
+    private array $firstPunchCache = [];
+
+    /** @var array<int, CarbonImmutable> */
+    private array $firstSessionCache = [];
+
+    /** @var array<int, CarbonImmutable> */
+    private array $employmentStartCache = [];
 
     public function __construct(?JustificationCalendar $calendar = null)
     {
@@ -50,6 +61,7 @@ class AnomalyEngine
             new LateEarlyRule(),
             new OvertimeRule(),
             new IrregularSessionRule(),
+            new UnderworkRule(),
         ];
     }
 
@@ -62,7 +74,8 @@ class AnomalyEngine
         $contract = $this->loadContractFor(
             $session->user_id,
             $session->resolved_site_id ?? $session->site_id,
-            $weekday
+            $weekday,
+            $date
         );
 
         $payloads = [];
@@ -172,7 +185,7 @@ class AnomalyEngine
     /**
      * Carica la regola contrattuale per quel dipendente e quel weekday
      */
-    private function loadContractFor(int $userId, ?int $siteId, int $weekday): ?ContractDayDTO
+    private function loadContractFor(int $userId, ?int $siteId, int $weekday, CarbonImmutable $date): ?ContractDayDTO
     {
         $map = ['mon','tue','wed','thu','fri','sat','sun'];
         $dayKey = $map[$weekday] ?? 'mon';
@@ -182,6 +195,13 @@ class AnomalyEngine
             ->find($userId);
 
         if (! $user) {
+            return null;
+        }
+
+        $startBoundary = $this->employmentStartFor($user, $date);
+        $endBoundary = $this->employmentEndFor($user);
+
+        if ($date->startOfDay()->lt($startBoundary) || ($endBoundary && $date->greaterThan($endBoundary))) {
             return null;
         }
 
@@ -221,4 +241,61 @@ class AnomalyEngine
         );
     }
 
+
+    private function employmentStartFor(User $user, CarbonImmutable $sessionDate): CarbonImmutable
+    {
+        if (! array_key_exists($user->id, $this->employmentStartCache)) {
+            $start = $user->hired_at?->toImmutable();
+
+            if (! $start) {
+                $start = $this->firstPunchDate($user->id)
+                    ?? $this->firstWorkedSessionDate($user->id);
+            }
+
+            $this->employmentStartCache[$user->id] = ($start ?? $sessionDate)->startOfDay();
+        }
+
+        return $this->employmentStartCache[$user->id];
+    }
+
+    private function employmentEndFor(User $user): ?CarbonImmutable
+    {
+        return $user->contract_end_at
+            ? CarbonImmutable::parse($user->contract_end_at)->endOfDay()
+            : null;
+    }
+
+    private function firstPunchDate(int $userId): ?CarbonImmutable
+    {
+        if (! array_key_exists($userId, $this->firstPunchCache)) {
+            $timestamp = DgPunch::where('user_id', $userId)->min('created_at');
+            $this->firstPunchCache[$userId] = $timestamp
+                ? CarbonImmutable::parse($timestamp)->startOfDay()
+                : null;
+        }
+
+        return $this->firstPunchCache[$userId];
+    }
+
+    private function firstWorkedSessionDate(int $userId): ?CarbonImmutable
+    {
+        if (! array_key_exists($userId, $this->firstSessionCache)) {
+            $sessionDate = DgWorkSession::query()
+                ->where('user_id', $userId)
+                ->where(function ($query) {
+                    $query->whereNotNull('check_in')
+                        ->orWhereNotNull('check_out')
+                        ->orWhere('worked_minutes', '>', 0);
+                })
+                ->whereNotNull('session_date')
+                ->orderBy('session_date')
+                ->value('session_date');
+
+            $this->firstSessionCache[$userId] = $sessionDate
+                ? CarbonImmutable::parse($sessionDate)->startOfDay()
+                : null;
+        }
+
+        return $this->firstSessionCache[$userId];
+    }
 }

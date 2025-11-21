@@ -7,6 +7,7 @@ use App\Models\DgAnomaly;
 use App\Models\User;
 use App\Models\DgSite;
 use App\Models\DgWorkSession;
+use App\Models\DgUserJustification;
 use App\Services\Anomalies\AnomalyStatusService;
 use Filament\Forms;
 use Filament\Forms\Form;
@@ -26,6 +27,73 @@ class DgAnomalyResource extends Resource
     protected static ?string $modelLabel = 'Anomalia';
     protected static ?string $pluralModelLabel = 'Anomalie';
     protected static ?int $navigationSort = 36;
+
+    public static function form(Form $form): Form
+    {
+        return $form
+            ->schema([
+                Forms\Components\Select::make('type')
+                    ->label('Tipo')
+                    ->options([
+                        'missing_punch' => 'Timbratura mancante',
+                        'absence' => 'Assenza',
+                        'unplanned_day' => 'Giorno non previsto',
+                        'late_entry' => 'Entrata in ritardo',
+                        'early_exit' => 'Uscita anticipata',
+                        'overtime' => 'Straordinario',
+                        'irregular_session' => 'Sessione irregolare',
+                        'underwork' => 'Ore insufficienti',
+                    ])
+                    ->disabled(),
+                Forms\Components\DatePicker::make('date')
+                    ->label('Data')
+                    ->disabled(),
+                Forms\Components\TextInput::make('worked_minutes')
+                    ->label('Minuti lavorati')
+                    ->disabled()
+                    ->dehydrated(false)
+                    ->formatStateUsing(fn (?DgAnomaly $record) => $record?->session?->worked_minutes ?? 0),
+                Forms\Components\TextInput::make('expected_minutes')
+                    ->label('Minuti previsti')
+                    ->disabled()
+                    ->dehydrated(false)
+                    ->formatStateUsing(fn (?DgAnomaly $record) => self::expectedMinutes($record)),
+                Forms\Components\Textarea::make('note')
+                    ->label('Note')
+                    ->rows(3),
+                Forms\Components\Textarea::make('justification')
+                    ->label('Giustificazioni')
+                    ->disabled()
+                    ->dehydrated(false)
+                    ->rows(3)
+                    ->formatStateUsing(function (?DgAnomaly $record) {
+                        return $record?->justifications?->map(function (DgUserJustification $justification) {
+                            $category = DgUserJustification::CATEGORIES[$justification->category] ?? $justification->category;
+                            $range = $justification->date?->format('d/m/Y');
+
+                            if ($justification->date_end && $justification->date_end?->ne($justification->date)) {
+                                $range .= ' - ' . $justification->date_end?->format('d/m/Y');
+                            }
+
+                            $note = trim((string) ($justification->note ?? ''));
+
+                            return trim(implode(' ', array_filter([
+                                $category,
+                                $range ? "({$range})" : null,
+                                $note,
+                            ])));
+                        })->implode("\n");
+                    }),
+                Forms\Components\Select::make('status')
+                    ->label('Stato')
+                    ->options([
+                        'open' => 'Aperta',
+                        'approved' => 'Approvata',
+                        'rejected' => 'Respinta',
+                        'justified' => 'Giustificata',
+                    ]),
+            ]);
+    }
 
     public static function table(Table $table): Table
     {
@@ -240,5 +308,20 @@ class DgAnomalyResource extends Resource
             'index' => Pages\ListDgAnomalies::route('/'),
             'edit'  => Pages\EditDgAnomaly::route('/{record}/edit'),
         ];
+    }
+
+    private static function expectedMinutes(?DgAnomaly $record): ?int
+    {
+        if (! $record) {
+            return null;
+        }
+
+        $worked = (int) ($record->session?->worked_minutes ?? 0);
+        $delta = (int) ($record->minutes ?? 0);
+
+        return match ($record->type) {
+            'overtime' => max(0, $worked - $delta),
+            default => $worked + $delta,
+        };
     }
 }

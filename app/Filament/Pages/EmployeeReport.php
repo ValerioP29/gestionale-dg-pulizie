@@ -100,20 +100,17 @@ class EmployeeReport extends Page implements HasForms
             Actions\Action::make('refresh')
                 ->label('Aggiorna report')
                 ->icon('heroicon-o-arrow-path')
-                ->action(fn () => $this->refreshReport())
-                ->disabled(fn () => ! $this->userId),
+                ->action(fn () => $this->refreshReport()),
             Actions\Action::make('downloadCsv')
                 ->label('Esporta CSV')
                 ->icon('heroicon-o-arrow-down-tray')
                 ->action(fn () => $this->downloadCsv())
-                ->requiresConfirmation(false)
-                ->disabled(fn () => ! $this->userId),
+                ->requiresConfirmation(false),
             Actions\Action::make('downloadXlsx')
                 ->label('Esporta XLSX')
                 ->icon('heroicon-o-document-arrow-down')
                 ->action(fn () => $this->downloadXlsx())
-                ->requiresConfirmation(false)
-                ->disabled(fn () => ! $this->userId),
+                ->requiresConfirmation(false),
         ];
     }
 

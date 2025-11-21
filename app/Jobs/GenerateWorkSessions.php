@@ -111,6 +111,27 @@ class GenerateWorkSessions implements ShouldQueue
                 continue;
             }
 
+            $employmentStart = $user->hired_at?->startOfDay();
+
+            if (! $employmentStart) {
+                $firstPunch = $user->punches()->min('created_at');
+                $employmentStart = $firstPunch ? Carbon::parse($firstPunch)->startOfDay() : null;
+            }
+
+            $employmentEnd = $user->contract_end_at?->endOfDay();
+
+            if (! $employmentStart) {
+                continue;
+            }
+
+            if ($employmentStart && $targetDate->lt($employmentStart)) {
+                continue;
+            }
+
+            if ($employmentEnd && $targetDate->gt($employmentEnd)) {
+                continue;
+            }
+
             $siteId = SiteResolverService::resolveFor($user, null, $targetDate->copy());
 
             $exists = DgWorkSession::where('user_id', $user->id)

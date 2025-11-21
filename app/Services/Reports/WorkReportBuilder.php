@@ -206,6 +206,7 @@ class WorkReportBuilder
             'early_exit' => 'Uscita anticipata',
             'overtime' => 'Straordinario',
             'irregular_session' => 'Sessione irregolare',
+            'underwork' => 'Ore insufficienti',
             default => ucfirst((string) $type),
         };
     }
