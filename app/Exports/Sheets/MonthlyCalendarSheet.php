@@ -7,73 +7,52 @@ use Illuminate\Support\Collection;
 use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\WithTitle;
+use Maatwebsite\Excel\Concerns\ShouldAutoSize;
+use Maatwebsite\Excel\Concerns\WithStyles;
+use Maatwebsite\Excel\Concerns\WithEvents;
+use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Border;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
+use Maatwebsite\Excel\Events\AfterSheet;
 
-class MonthlyCalendarSheet implements FromCollection, WithHeadings, WithTitle
+class MonthlyCalendarSheet implements 
+    FromCollection, 
+    WithHeadings, 
+    WithTitle, 
+    ShouldAutoSize, 
+    WithStyles, 
+    WithEvents
 {
-    private const DAY_HEADINGS = [
-        'MER 1',
-        'GIOV 2',
-        'VEN 3',
-        'SAB 4',
-        'DOM 5',
-        'VEN-6',
-        'SAB-7',
-        'DOM-08',
-        'LUN-9',
-        'mar-10',
-        'MERC-11',
-        'GIO-12',
-        'VEN-13',
-        'SAB-14',
-        'DOM-15',
-        'LUN-16',
-        'mar-17',
-        'MER-18',
-        'GIO-19',
-        'VEN-20',
-        'SAB-21',
-        'DOM-22',
-        'LUN-23',
-        'MART-24',
-        'MER-25',
-        'GIO-26',
-        'VEN-27',
-        'SAB-28',
-        'DOM-29',
-        'LUN-30',
-        '31',
-    ];
-
+    protected CarbonImmutable $start;
     protected int $daysInMonth;
 
     public function __construct(protected array $dataset)
     {
-        /** @var CarbonImmutable $start */
-        $start = $dataset['start'];
-        $this->daysInMonth = $start->daysInMonth;
+        $this->start = $dataset['start'];
+        $this->daysInMonth = $this->start->daysInMonth;
     }
 
     public function collection(): Collection
     {
-        $rows = $this->dataset['calendar'] ?? collect();
-        $rows = $rows instanceof Collection ? $rows : collect($rows);
+        $rows = collect($this->dataset['calendar'] ?? []);
 
         return $rows->map(function (array $row) {
 
             $contract = $row['contract_week'] ?? [];
 
-            // === ORDINAMENTO BASE IDENTICO AL MODELLO ===
+            // base columns
             $base = [
-                $row['tipologia'],
-                $row['cliente_cod'],
-                $row['site_cod'],
-                $row['cliente_nome'],
-                $row['cantiere'],
-                $row['matricola'],
-                $row['last_name'],
-                $row['first_name'],
-                $row['hired_at'],
-                $row['end_at'],
+                $row['tipologia'] ?? '',
+                $row['cliente_cod'] ?? '',
+                $row['site_cod'] ?? '',
+                $row['cliente_nome'] ?? '',
+                $row['cantiere'] ?? '',
+                $row['matricola'] ?? '',
+                $row['last_name'] ?? '',
+                $row['first_name'] ?? '',
+                $row['hired_at'] ?? '',
+                $row['end_at'] ?? '',
                 $contract['mon'] ?? '',
                 $contract['tue'] ?? '',
                 $contract['wed'] ?? '',
@@ -84,9 +63,9 @@ class MonthlyCalendarSheet implements FromCollection, WithHeadings, WithTitle
                 $row['contract_week_total'] ?? '',
             ];
 
-            // giorni 1..31
+            // dynamic days
             $days = [];
-            for ($d = 1; $d <= 31; $d++) {
+            for ($d = 1; $d <= $this->daysInMonth; $d++) {
                 $days[] = $row['giorni'][$d] ?? '';
             }
 
@@ -100,6 +79,14 @@ class MonthlyCalendarSheet implements FromCollection, WithHeadings, WithTitle
 
     public function headings(): array
     {
+        $dayHeadings = [];
+
+        for ($d = 1; $d <= $this->daysInMonth; $d++) {
+            $date = $this->start->day($d)->locale('it');
+            $dow = strtoupper(substr($date->dayName, 0, 3));   // LUN, MAR, MER
+            $dayHeadings[] = "{$dow} {$d}";
+        }
+
         return [
             'tipologia',
             'COD. RAGG. CLI.',
@@ -119,10 +106,64 @@ class MonthlyCalendarSheet implements FromCollection, WithHeadings, WithTitle
             'SABATO',
             'DOMENICA',
             'TOTALE ORE CONTRATTO',
-            ...self::DAY_HEADINGS,
+            ...$dayHeadings,
             'totale',
             'straord.',
             'nota extra',
+        ];
+    }
+
+    public function styles(Worksheet $sheet)
+    {
+        return [
+            1 => ['font' => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']]]
+        ];
+    }
+
+    public function registerEvents(): array
+    {
+        return [
+            AfterSheet::class => function (AfterSheet $event) {
+
+                $sheet = $event->sheet->getDelegate();
+
+                // freeze the top row
+                $sheet->freezePane('A2');
+
+                // header background
+                $sheet->getStyle('A1:' . $sheet->getHighestColumn() . '1')->applyFromArray([
+                    'fill' => [
+                        'fillType' => Fill::FILL_SOLID,
+                        'color' => ['rgb' => '4A90E2'],
+                    ],
+                    'font' => [
+                        'bold' => true,
+                        'color' => ['rgb' => 'FFFFFF'],
+                    ],
+                    'alignment' => [
+                        'horizontal' => Alignment::HORIZONTAL_CENTER,
+                        'vertical' => Alignment::VERTICAL_CENTER,
+                    ]
+                ]);
+
+                // borders for all cells
+                $range = 'A1:' . $sheet->getHighestColumn() . $sheet->getHighestRow();
+                $sheet->getStyle($range)->applyFromArray([
+                    'borders' => [
+                        'allBorders' => [
+                            'borderStyle' => Border::BORDER_THIN,
+                            'color' => ['rgb' => 'AAAAAA']
+                        ]
+                    ]
+                ]);
+
+                // center day columns
+                $lastCol = $sheet->getHighestColumn();
+                for ($col = 'T'; $col <= $lastCol; $col++) {
+                    $sheet->getStyle($col)->getAlignment()
+                        ->setHorizontal(Alignment::HORIZONTAL_CENTER);
+                }
+            }
         ];
     }
 

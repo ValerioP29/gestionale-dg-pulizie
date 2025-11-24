@@ -8,8 +8,22 @@ use Illuminate\Support\Collection;
 use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\WithTitle;
+use Maatwebsite\Excel\Concerns\ShouldAutoSize;
+use Maatwebsite\Excel\Concerns\WithStyles;
+use Maatwebsite\Excel\Concerns\WithEvents;
+use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Border;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
+use Maatwebsite\Excel\Events\AfterSheet;
 
-class ClientCustomReportExport implements FromCollection, WithHeadings, WithTitle
+class ClientCustomReportExport implements
+    FromCollection,
+    WithHeadings,
+    WithTitle,
+    ShouldAutoSize,
+    WithStyles,
+    WithEvents
 {
     public function __construct(
         protected int $clientId,
@@ -21,8 +35,8 @@ class ClientCustomReportExport implements FromCollection, WithHeadings, WithTitl
     public function collection(): Collection
     {
         $builder = new WorkReportBuilder();
-        $data = $builder->buildClientReport($this->clientId, $this->from, $this->to);
-        $rows = $data['rows'] instanceof Collection ? $data['rows'] : collect($data['rows']);
+        $data    = $builder->buildClientReport($this->clientId, $this->from, $this->to);
+        $rows    = $data['rows'] instanceof Collection ? $data['rows'] : collect($data['rows']);
 
         return $rows->map(fn (array $row) => [
             $row['site'],
@@ -41,5 +55,57 @@ class ClientCustomReportExport implements FromCollection, WithHeadings, WithTitl
     public function title(): string
     {
         return 'Report Cliente';
+    }
+
+    public function styles(Worksheet $sheet)
+    {
+        return [
+            1 => [
+                'font' => [
+                    'bold'  => true,
+                    'color' => ['rgb' => 'FFFFFF'],
+                ],
+            ],
+        ];
+    }
+
+    public function registerEvents(): array
+    {
+        return [
+            AfterSheet::class => function (AfterSheet $event) {
+                $sheet = $event->sheet->getDelegate();
+
+                // Freeze header
+                $sheet->freezePane('A2');
+
+                // Header blu
+                $sheet->getStyle('A1:' . $sheet->getHighestColumn() . '1')
+                    ->applyFromArray([
+                        'fill' => [
+                            'fillType' => Fill::FILL_SOLID,
+                            'color'    => ['rgb' => '4A90E2'],
+                        ],
+                        'font' => [
+                            'bold'  => true,
+                            'color' => ['rgb' => 'FFFFFF'],
+                        ],
+                        'alignment' => [
+                            'horizontal' => Alignment::HORIZONTAL_CENTER,
+                            'vertical'   => Alignment::VERTICAL_CENTER,
+                        ],
+                    ]);
+
+                // Bordi
+                $range = 'A1:' . $sheet->getHighestColumn() . $sheet->getHighestRow();
+                $sheet->getStyle($range)->applyFromArray([
+                    'borders' => [
+                        'allBorders' => [
+                            'borderStyle' => Border::BORDER_THIN,
+                            'color'       => ['rgb' => 'AAAAAA'],
+                        ],
+                    ],
+                ]);
+            },
+        ];
     }
 }

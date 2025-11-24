@@ -161,9 +161,15 @@ class SiteReport extends Page implements HasForms
     {
         $state = $this->form->getState();
 
-        $this->siteId = filled($state['site_id'] ?? null)
-            ? (int) $state['site_id']
-            : null;
+       $value = $state['site_id'] ?? null;
+
+        if ($value instanceof \Illuminate\Database\Eloquent\Collection) {
+            $this->siteId = $value->first()?->id ?? null;
+        } elseif ($value instanceof \App\Models\DgSite) {
+            $this->siteId = $value->id;
+        } else {
+            $this->siteId = $value ? (int) $value : null;
+        }
 
         $this->dateFrom = $state['date_from'] ?? $this->dateFrom;
         $this->dateTo = $state['date_to'] ?? $this->dateTo;

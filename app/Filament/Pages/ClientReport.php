@@ -154,10 +154,16 @@ class ClientReport extends Page implements HasForms
     private function syncFormState(): void
     {
         $state = $this->form->getState();
+        
+        $value = $state['client_id'] ?? null;
 
-        $this->clientId = filled($state['client_id'] ?? null)
-            ? (int) $state['client_id']
-            : null;
+        if ($value instanceof \Illuminate\Database\Eloquent\Collection) {
+            $this->clientId = $value->first()?->id ?? null;
+        } elseif ($value instanceof \App\Models\DgClient) {
+            $this->clientId = $value->id;
+        } else {
+            $this->clientId = $value ? (int) $value : null;
+        }
 
         $this->dateFrom = $state['date_from'] ?? $this->dateFrom;
         $this->dateTo = $state['date_to'] ?? $this->dateTo;

@@ -23,57 +23,69 @@ class WorkReportBuilder
             ->orderBy('session_date')
             ->get();
 
-        $anomalies = $this->anomaliesForSessions($sessions->pluck('id')->all(), $from, $to);
+        $anomalies  = $this->anomaliesForSessions($sessions->pluck('id')->all(), $from, $to);
         $standalone = $this->standaloneAnomalies($userId, $from, $to);
 
         $rows = $sessions->map(function (DgWorkSession $session) use ($anomalies) {
             $flags = $anomalies->get($session->id, collect());
 
             return [
-                'date' => CarbonImmutable::parse($session->session_date),
-                'site' => $session->resolvedSite?->name
+                'date'      => CarbonImmutable::parse($session->session_date),
+                'site'      => $session->resolvedSite?->name
                     ?? $session->site?->name
                     ?? '—',
-                'hours' => round(($session->worked_minutes ?? 0) / 60, 2),
-                'overtime' => round(($session->overtime_minutes ?? 0) / 60, 2),
-                'status' => $session->approval_status,
-                'anomalies' => $flags->map(fn (DgAnomaly $anomaly) => $this->labelForAnomaly($anomaly->type))->values()->all(),
+                'hours'     => round(($session->worked_minutes ?? 0) / 60, 2),
+                'overtime'  => round(($session->overtime_minutes ?? 0) / 60, 2),
+                'status'    => $session->approval_status,
+                'anomalies' => $flags
+                    ->map(fn (DgAnomaly $anomaly) => $this->labelForAnomaly($anomaly->type))
+                    ->values()
+                    ->all(),
             ];
         });
 
         foreach ($standalone as $anomaly) {
             $rows->push([
-                'date' => CarbonImmutable::parse($anomaly->date),
-                'site' => '—',
-                'hours' => 0.0,
-                'overtime' => 0.0,
-                'status' => 'assenza',
+                'date'      => CarbonImmutable::parse($anomaly->date),
+                'site'      => '—',
+                'hours'     => 0.0,
+                'overtime'  => 0.0,
+                'status'    => 'assenza',
                 'anomalies' => [$this->labelForAnomaly($anomaly->type)],
             ]);
         }
 
-        $rows = $rows->sortBy('date')->values();
-
-        $totalHours = $rows->sum('hours');
-        $totalOvertime = $rows->sum('overtime');
-        $daysWorked = $sessions->pluck('session_date')->unique()->count();
+        $rows           = $rows->sortBy('date')->values();
+        $totalHours     = $rows->sum('hours');
+        $totalOvertime  = $rows->sum('overtime');
+        $daysWorked     = $sessions->pluck('session_date')->unique()->count();
         $anomaliesCount = $anomalies->flatten()->count() + $standalone->count();
 
         return [
-            'user' => $user,
+            'user'    => $user,
             'summary' => [
-                'total_hours' => round($totalHours, 2),
-                'overtime_hours' => round($totalOvertime, 2),
-                'days_worked' => $daysWorked,
-                'anomalies' => $anomaliesCount,
+                'total_hours'     => round($totalHours, 2),
+                'overtime_hours'  => round($totalOvertime, 2),
+                'days_worked'     => $daysWorked,
+                'anomalies'       => $anomaliesCount,
             ],
-            'rows' => $rows,
+            'rows'    => $rows,
         ];
     }
 
-    public function buildSiteReport(int $siteId, CarbonImmutable $from, CarbonImmutable $to): array
+    public function buildSiteReport($siteId, CarbonImmutable $from, CarbonImmutable $to): array
     {
-        $site = DgSite::with('client')->findOrFail($siteId);
+        // Normalizzazione difensiva: accetto int, Model, Collection
+        if ($siteId instanceof Collection) {
+            $siteId = $siteId->first()?->id ?? null;
+        }
+
+        if ($siteId instanceof DgSite) {
+            $site = $siteId->load('client');
+            $siteId = $site->id;
+        } else {
+            $site = DgSite::with('client')->findOrFail((int) $siteId);
+        }
 
         $sessions = DgWorkSession::query()
             ->with(['user'])
@@ -89,42 +101,58 @@ class WorkReportBuilder
 
         $anomalies = $this->anomaliesForSessions($sessions->pluck('id')->all(), $from, $to);
 
-        $byUser = $sessions->groupBy('user_id')->map(function (Collection $items) use ($anomalies) {
-            $user = $items->first()->user;
-            $sessionIds = $items->pluck('id');
-            $anomalyCount = $anomalies->only($sessionIds->all())->flatten()->count();
+        $byUser = $sessions->groupBy('user_id')->map(function (Collection $items, $userId) use ($anomalies) {
+            $user        = $items->first()->user;
+            $sessionIds  = $items->pluck('id')->all();
+            $anomalyCount = $anomalies->only($sessionIds)->flatten()->count();
 
             return [
-                'user' => $user?->full_name ?? $user?->name ?? '—',
-                'days' => $items->pluck('session_date')->unique()->count(),
-                'hours' => round($items->sum('worked_minutes') / 60, 2),
-                'overtime' => round($items->sum('overtime_minutes') / 60, 2),
+                'user'      => $user?->full_name ?? $user?->name ?? '—',
+                'days'      => $items->pluck('session_date')->unique()->count(),
+                'hours'     => round($items->sum('worked_minutes') / 60, 2),
+                'overtime'  => round($items->sum('overtime_minutes') / 60, 2),
                 'anomalies' => $anomalyCount,
             ];
         })->values();
 
         return [
-            'site' => $site,
+            'site'    => $site,
             'summary' => [
-                'total_hours' => round($byUser->sum('hours'), 2),
-                'overtime_hours' => round($byUser->sum('overtime'), 2),
-                'days_worked' => $sessions->pluck('session_date')->unique()->count(),
-                'anomalies' => $byUser->sum('anomalies'),
+                'total_hours'     => round($byUser->sum('hours'), 2),
+                'overtime_hours'  => round($byUser->sum('overtime'), 2),
+                'days_worked'     => $sessions->pluck('session_date')->unique()->count(),
+                'anomalies'       => $byUser->sum('anomalies'),
             ],
-            'rows' => $byUser,
+            'rows'    => $byUser,
         ];
     }
 
-    public function buildClientReport(int $clientId, CarbonImmutable $from, CarbonImmutable $to): array
+    public function buildClientReport($clientId, CarbonImmutable $from, CarbonImmutable $to): array
     {
-        $client = DgClient::with('sites')->findOrFail($clientId);
+        // Normalizzazione difensiva: int, Model, Collection
+        if ($clientId instanceof Collection) {
+            $clientId = $clientId->first()?->id ?? null;
+        }
+
+        if ($clientId instanceof DgClient) {
+            $client   = $clientId->load('sites');
+            $clientId = $client->id;
+        } else {
+            $client = DgClient::with('sites')->findOrFail((int) $clientId);
+        }
+
         $siteIds = $client->sites->pluck('id')->all();
 
         if ($siteIds === []) {
             return [
-                'client' => $client,
-                'summary' => ['total_hours' => 0, 'overtime_hours' => 0, 'days_worked' => 0, 'anomalies' => 0],
-                'rows' => collect(),
+                'client'  => $client,
+                'summary' => [
+                    'total_hours'     => 0,
+                    'overtime_hours'  => 0,
+                    'days_worked'     => 0,
+                    'anomalies'       => 0,
+                ],
+                'rows'    => collect(),
             ];
         }
 
@@ -144,33 +172,35 @@ class WorkReportBuilder
 
         $bySite = $sessions->groupBy(function (DgWorkSession $session) {
             return $session->resolved_site_id ?? $session->site_id;
-        })->map(function (Collection $items) use ($anomalies) {
+        })->map(function (Collection $items, $siteId) use ($anomalies) {
+
             /** @var DgWorkSession $first */
-            $first = $items->first();
+            $first    = $items->first();
             $siteName = $first->resolvedSite?->name
                 ?? $first->site?->name
                 ?? 'Cantiere sprovvisto';
-            $sessionIds = $items->pluck('id');
-            $anomalyCount = $anomalies->only($sessionIds->all())->flatten()->count();
+
+            $sessionIds   = $items->pluck('id')->all();
+            $anomalyCount = $anomalies->only($sessionIds)->flatten()->count();
 
             return [
-                'site' => $siteName,
-                'hours' => round($items->sum('worked_minutes') / 60, 2),
-                'overtime' => round($items->sum('overtime_minutes') / 60, 2),
-                'days' => $items->pluck('session_date')->unique()->count(),
+                'site'      => $siteName,
+                'hours'     => round($items->sum('worked_minutes') / 60, 2),
+                'overtime'  => round($items->sum('overtime_minutes') / 60, 2),
+                'days'      => $items->pluck('session_date')->unique()->count(),
                 'anomalies' => $anomalyCount,
             ];
         })->values();
 
         return [
-            'client' => $client,
+            'client'  => $client,
             'summary' => [
-                'total_hours' => round($bySite->sum('hours'), 2),
-                'overtime_hours' => round($bySite->sum('overtime'), 2),
-                'days_worked' => $sessions->pluck('session_date')->unique()->count(),
-                'anomalies' => $bySite->sum('anomalies'),
+                'total_hours'     => round($bySite->sum('hours'), 2),
+                'overtime_hours'  => round($bySite->sum('overtime'), 2),
+                'days_worked'     => $sessions->pluck('session_date')->unique()->count(),
+                'anomalies'       => $bySite->sum('anomalies'),
             ],
-            'rows' => $bySite,
+            'rows'    => $bySite,
         ];
     }
 
@@ -199,15 +229,15 @@ class WorkReportBuilder
     private function labelForAnomaly(?string $type): string
     {
         return match ($type) {
-            'missing_punch' => 'Timbratura mancante',
-            'absence' => 'Assenza',
-            'unplanned_day' => 'Giorno non previsto',
-            'late_entry' => 'Ritardo',
-            'early_exit' => 'Uscita anticipata',
-            'overtime' => 'Straordinario',
+            'missing_punch'     => 'Timbratura mancante',
+            'absence'           => 'Assenza',
+            'unplanned_day'     => 'Giorno non previsto',
+            'late_entry'        => 'Ritardo',
+            'early_exit'        => 'Uscita anticipata',
+            'overtime'          => 'Straordinario',
             'irregular_session' => 'Sessione irregolare',
-            'underwork' => 'Ore insufficienti',
-            default => ucfirst((string) $type),
+            'underwork'         => 'Ore insufficienti',
+            default             => ucfirst((string) $type),
         };
     }
 }

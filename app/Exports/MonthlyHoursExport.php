@@ -28,13 +28,13 @@ class MonthlyHoursExport implements WithMultipleSheets
         $dataset = $this->buildDataset();
 
         return [
-            new MonthlyOverviewSheet($dataset),
             new MonthlyCalendarSheet($dataset),
+            new MonthlyOverviewSheet($dataset),
             new MonthlySitesSheet($dataset),
         ];
     }
 
-    private function buildDataset(): array
+   private function buildDataset(): array
     {
         $sessions = DgWorkSession::query()
             ->with(['user.mainSite.client', 'resolvedSite', 'site'])
@@ -59,11 +59,17 @@ class MonthlyHoursExport implements WithMultipleSheets
             return $anomaly->session?->resolved_site_id ?? $anomaly->session?->site_id;
         });
 
+        // ✔️ giorni reali del mese
         $daysInMonth = $this->start->daysInMonth;
 
+        // ==========================
+        // CALENDAR (per Daily Sheet)
+        // ==========================
         $calendarRows = $users->map(function (User $user) use ($sessionsByUser, $daysInMonth, $anomaliesByUser) {
             $sessions = $sessionsByUser->get($user->id, collect());
-            $byDate = $sessions->keyBy(fn ($session) => CarbonImmutable::parse($session->session_date)->toDateString());
+            $byDate = $sessions->keyBy(fn ($session) =>
+                CarbonImmutable::parse($session->session_date)->toDateString()
+            );
 
             $contractHours = $this->contractHoursFor($user);
 
@@ -71,21 +77,19 @@ class MonthlyHoursExport implements WithMultipleSheets
             $total = 0.0;
             $overtime = 0.0;
 
-            for ($d = 1; $d <= 31; $d++) {
-                if ($d > $daysInMonth) {
-                    $giorni[$d] = '';
-
-                    continue;
-                }
+            // ✔️ usa solo i giorni veri del mese
+            for ($d = 1; $d <= $daysInMonth; $d++) {
 
                 $date = $this->start->day($d)->toDateString();
                 $session = $byDate->get($date);
-                $hours = $session ? round(($session->worked_minutes ?? 0) / 60, 2) : '';
-                $giorni[$d] = $hours === 0.0 ? '' : $hours;
 
                 if ($session) {
-                    $total += $hours !== '' ? (float) $hours : 0;
+                    $hours = round(($session->worked_minutes ?? 0) / 60, 2);
+                    $giorni[$d] = $hours > 0 ? $hours : '';
+                    $total += $hours;
                     $overtime += round(($session->overtime_minutes ?? 0) / 60, 2);
+                } else {
+                    $giorni[$d] = '';
                 }
             }
 
@@ -121,7 +125,7 @@ class MonthlyHoursExport implements WithMultipleSheets
                 'end_at' => $user->contract_end_at?->format('d/m/Y') ?? '',
                 'contract_week' => $contractHours,
                 'contract_week_total' => round(array_sum($contractHours), 2),
-                'giorni' => $giorni,
+                'giorni' => $giorni, // ✔️ solo giorni reali
                 'total_hours' => round($total, 2),
                 'overtime_hours' => round($overtime, 2),
                 'notes' => $notes,
@@ -129,8 +133,12 @@ class MonthlyHoursExport implements WithMultipleSheets
             ];
         })->values();
 
+        // ==========================
+        // OVERVIEW (per Overview Sheet)
+        // ==========================
         $overview = $calendarRows->map(function (array $row) use ($anomaliesByUser) {
             $userId = $row['user_id'] ?? null;
+
             return [
                 'name' => $row['utente'],
                 'site' => $row['cantiere'],
@@ -138,12 +146,17 @@ class MonthlyHoursExport implements WithMultipleSheets
                 'hours' => $row['total_hours'],
                 'overtime' => $row['overtime_hours'],
                 'notes' => $row['notes'],
-                'days' => collect($row['giorni'])->filter(fn ($value) => $value !== '')->count(),
+                'days' => collect($row['giorni'])->filter(fn ($v) => $v !== '')->count(),
                 'anomalies' => $userId ? $anomaliesByUser->get($userId, collect())->count() : 0,
             ];
         });
 
-        $sites = $sessions->groupBy(fn ($session) => $session->resolved_site_id ?? $session->site_id)
+        // ==========================
+        // SITES (per Sites Sheet)
+        // ==========================
+        $sites = $sessions->groupBy(fn ($session) =>
+            $session->resolved_site_id ?? $session->site_id
+        )
             ->map(function (Collection $items, $siteId) use ($anomaliesBySite) {
                 $first = $items->first();
                 $siteName = $first->resolvedSite?->name ?? $first->site?->name ?? 'Cantiere';
@@ -156,7 +169,8 @@ class MonthlyHoursExport implements WithMultipleSheets
                     'overtime' => round($items->sum('overtime_minutes') / 60, 2),
                     'days' => $items->pluck('session_date')->unique()->count(),
                     'employees' => $items->pluck('user_id')->unique()->count(),
-                    'anomalies' => $anomaliesBySite->get($siteId, collect())->count(),
+                    'anomalies' =>
+                        $anomaliesBySite->get($siteId, collect())->count(),
                 ];
             })
             ->values();
@@ -169,6 +183,7 @@ class MonthlyHoursExport implements WithMultipleSheets
             'sites' => $sites,
         ];
     }
+
 
     private function contractHoursFor(User $user): array
     {
