@@ -12,6 +12,7 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Log;
 
 class GenerateWorkSessions implements ShouldQueue
 {
@@ -26,14 +27,24 @@ class GenerateWorkSessions implements ShouldQueue
 
     public function handle(): void
     {
+        $startedAt = microtime(true);
         $targetDate = $this->date
             ? Carbon::parse($this->date)->startOfDay()
             : now()->subDay()->startOfDay();
 
-        // Prendo tutti i punch del giorno (usando created_at come fallback)
+        Log::info('GenerateWorkSessions: avvio', [
+            'target_date' => $targetDate->toDateString(),
+            'source' => $this->date ? 'manual' : 'auto',
+        ]);
+
+        // Prendo tutti i punch del giorno usando l'istante reale registrato nel payload
         $punches = DgPunch::query()
             ->with('user')
-            ->whereDate('created_at', $targetDate->toDateString()) // se usi payload punched_at lato DB, cambia qui
+            ->where(function ($query) use ($targetDate) {
+                $query->whereDate('payload->punched_at', $targetDate->toDateString())
+                    ->orWhereDate('payload->client_ts', $targetDate->toDateString())
+                    ->orWhereDate('created_at', $targetDate->toDateString());
+            })
             ->orderBy('created_at')
             ->get();
 
@@ -95,6 +106,12 @@ class GenerateWorkSessions implements ShouldQueue
         }
 
         $this->ensureAbsenceSessions($targetDate);
+
+        Log::info('GenerateWorkSessions: completato', [
+            'target_date' => $targetDate->toDateString(),
+            'punches_processed' => $punches->count(),
+            'duration_ms' => round((microtime(true) - $startedAt) * 1000, 2),
+        ]);
     }
 
     protected function ensureAbsenceSessions(Carbon $targetDate): void

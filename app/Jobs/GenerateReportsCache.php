@@ -31,7 +31,14 @@ class GenerateReportsCache implements ShouldQueue
 
     public function handle(): void
     {
+        $startedAt = microtime(true);
         [$start, $end] = $this->resolvePeriod();
+
+        Log::info('ReportsCache: avvio rigenerazione', [
+            'period_start' => $start->toDateString(),
+            'period_end' => $end->toDateString(),
+            'source' => $this->periodStart && $this->periodEnd ? 'manual' : 'auto',
+        ]);
 
         ReportsCacheStatus::refresh([
             'period_start' => $start->toDateString(),
@@ -66,6 +73,7 @@ class GenerateReportsCache implements ShouldQueue
                 Log::info('ReportsCache: nessuna sessione da processare', [
                     'period_start' => $start->toDateString(),
                     'period_end' => $end->toDateString(),
+                    'duration_ms' => round((microtime(true) - $startedAt) * 1000, 2),
                 ]);
 
                 ReportsCacheStatus::refresh([
@@ -83,6 +91,8 @@ class GenerateReportsCache implements ShouldQueue
             $assignments = $this->loadAssignments($userIds, $start, $end);
 
             $processed = 0;
+            $justificationsProcessed = 0;
+            $anomaliesProcessed = 0;
 
             foreach ($grouped as $userId => $bySite) {
                 foreach ($bySite as $siteId => $records) {
@@ -126,14 +136,18 @@ class GenerateReportsCache implements ShouldQueue
                     $earlyExits = (clone $anomaliesQuery)->where('type', 'early_exit')->count();
                     $absencesAnomalies = (clone $anomaliesQuery)->where('type', 'absence')->count();
 
+                    $anomaliesProcessed += $lateEntries + $earlyExits + $absencesAnomalies;
+
                     $justifiedDays = $this->countJustifiedDaysForSite(
                         $calendar,
                         $userId,
                         $start->copy(),
                         $end->copy(),
-                        $assignments->get($siteId, collect()),
+                        $assignmentSet,
                         $sitesForUser
                     );
+
+                    $justificationsProcessed += $justifiedDays;
 
                     $contractAbsences = max(0, $expectedDays - $daysPresent - $justifiedDays);
                     $daysAbsent = max($absencesAnomalies, $contractAbsences);
@@ -180,6 +194,9 @@ class GenerateReportsCache implements ShouldQueue
                 'period_start' => $start->toDateString(),
                 'period_end' => $end->toDateString(),
                 'records' => $processed,
+                'justified_days' => $justificationsProcessed,
+                'anomalies_processed' => $anomaliesProcessed,
+                'duration_ms' => round((microtime(true) - $startedAt) * 1000, 2),
             ]);
         } finally {
             ReportsCacheStatus::clear();
