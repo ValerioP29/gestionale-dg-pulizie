@@ -104,7 +104,10 @@ class WorkReportBuilder
         $byUser = $sessions->groupBy('user_id')->map(function (Collection $items, $userId) use ($anomalies) {
             $user        = $items->first()->user;
             $sessionIds  = $items->pluck('id')->all();
-            $anomalyCount = $anomalies->only($sessionIds)->flatten()->count();
+            $anomalyCount = $anomalies
+            ->filter(fn ($value, $key) => in_array($key, $sessionIds))
+            ->flatten()
+            ->count();
 
             return [
                 'user'      => $user?->full_name ?? $user?->name ?? '—',
@@ -181,8 +184,10 @@ class WorkReportBuilder
                 ?? 'Cantiere sprovvisto';
 
             $sessionIds   = $items->pluck('id')->all();
-            $anomalyCount = $anomalies->only($sessionIds)->flatten()->count();
-
+            $anomalyCount = $anomalies
+                ->filter(fn ($value, $key) => in_array($key, $sessionIds))
+                ->flatten()
+                ->count();
             return [
                 'site'      => $siteName,
                 'hours'     => round($items->sum('worked_minutes') / 60, 2),
