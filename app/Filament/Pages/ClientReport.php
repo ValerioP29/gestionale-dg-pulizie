@@ -12,6 +12,8 @@ use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
+use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\Eloquent\Model;
 use Maatwebsite\Excel\Facades\Excel;
 
 class ClientReport extends Page implements HasForms
@@ -67,7 +69,7 @@ class ClientReport extends Page implements HasForms
                 ->options(DgClient::query()->orderBy('name')->pluck('name', 'id')->toArray())
                 ->searchable()
                 ->reactive()
-                ->afterStateUpdated(fn ($state) => $this->clientId = $state ? (int) $state : null),
+                ->afterStateUpdated(fn ($state) => $this->clientId = $this->resolveClientId($state)),
             Forms\Components\DatePicker::make('date_from')
                 ->label('Dal')
                 ->default($this->dateFrom)
@@ -113,9 +115,16 @@ class ClientReport extends Page implements HasForms
         $data = $builder->buildClientReport($this->clientId, $from, $to);
 
         $this->report = [
-            'client' => $data['client'],
-            'summary' => $data['summary'],
-            'rows' => $data['rows'],
+            'client' => $data['client'] ?? null,
+            'summary' => $data['summary'] ?? [
+                'total_hours' => 0.0,
+                'overtime_hours' => 0.0,
+                'days_worked' => 0,
+                'anomalies' => 0,
+            ],
+            'rows' => ($data['rows'] ?? null) instanceof Collection
+                ? $data['rows']
+                : collect($data['rows'] ?? []),
         ];
     }
 
@@ -155,9 +164,7 @@ class ClientReport extends Page implements HasForms
     {
         $state = $this->form->getState();
 
-        $this->clientId = filled($state['client_id'] ?? null)
-            ? (int) $state['client_id']
-            : null;
+        $this->clientId = $this->resolveClientId($state['client_id'] ?? null);
 
         $this->dateFrom = $state['date_from'] ?? $this->dateFrom;
         $this->dateTo = $state['date_to'] ?? $this->dateTo;
@@ -167,6 +174,29 @@ class ClientReport extends Page implements HasForms
             'date_from' => $this->dateFrom,
             'date_to' => $this->dateTo,
         ]);
+    }
+
+    private function resolveClientId(mixed $value): ?int
+    {
+        if ($value instanceof Collection) {
+            $value = $value->first();
+        }
+
+        if ($value instanceof Model) {
+            if (! $value->exists) {
+                return null;
+            }
+
+            $value = $value->id ?? null;
+        }
+
+        if (is_numeric($value)) {
+            $id = (int) $value;
+
+            return DgClient::query()->whereKey($id)->exists() ? $id : null;
+        }
+
+        return null;
     }
 
     private function hasRequiredFilters(): bool

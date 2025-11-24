@@ -12,6 +12,8 @@ use Filament\Forms\Concerns\InteractsWithForms;
 use Filament\Forms\Contracts\HasForms;
 use Filament\Notifications\Notification;
 use Filament\Pages\Page;
+use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\Eloquent\Model;
 use Maatwebsite\Excel\Facades\Excel;
 
 class SiteReport extends Page implements HasForms
@@ -73,7 +75,7 @@ class SiteReport extends Page implements HasForms
                 )
                 ->searchable()
                 ->reactive()
-                ->afterStateUpdated(fn ($state) => $this->siteId = $state ? (int) $state : null),
+                ->afterStateUpdated(fn ($state) => $this->siteId = $this->resolveSiteId($state)),
             Forms\Components\DatePicker::make('date_from')
                 ->label('Dal')
                 ->default($this->dateFrom)
@@ -119,9 +121,16 @@ class SiteReport extends Page implements HasForms
         $data = $builder->buildSiteReport($this->siteId, $from, $to);
 
         $this->report = [
-            'site' => $data['site'],
-            'summary' => $data['summary'],
-            'rows' => $data['rows'],
+            'site' => $data['site'] ?? null,
+            'summary' => $data['summary'] ?? [
+                'total_hours' => 0.0,
+                'overtime_hours' => 0.0,
+                'days_worked' => 0,
+                'anomalies' => 0,
+            ],
+            'rows' => ($data['rows'] ?? null) instanceof Collection
+                ? $data['rows']
+                : collect($data['rows'] ?? []),
         ];
     }
 
@@ -161,9 +170,7 @@ class SiteReport extends Page implements HasForms
     {
         $state = $this->form->getState();
 
-        $this->siteId = filled($state['site_id'] ?? null)
-            ? (int) $state['site_id']
-            : null;
+        $this->siteId = $this->resolveSiteId($state['site_id'] ?? null);
 
         $this->dateFrom = $state['date_from'] ?? $this->dateFrom;
         $this->dateTo = $state['date_to'] ?? $this->dateTo;
@@ -173,6 +180,29 @@ class SiteReport extends Page implements HasForms
             'date_from' => $this->dateFrom,
             'date_to' => $this->dateTo,
         ]);
+    }
+
+    private function resolveSiteId(mixed $value): ?int
+    {
+        if ($value instanceof Collection) {
+            $value = $value->first();
+        }
+
+        if ($value instanceof Model) {
+            if (! $value->exists) {
+                return null;
+            }
+
+            $value = $value->id ?? null;
+        }
+
+        if (is_numeric($value)) {
+            $id = (int) $value;
+
+            return DgSite::query()->whereKey($id)->exists() ? $id : null;
+        }
+
+        return null;
     }
 
     private function hasRequiredFilters(): bool
