@@ -16,6 +16,8 @@ Route::get('/payslip/{payslip}/download', function (DgPayslip $payslip) {
 })->name('payslip.download');
 
 
-Route::get('/reports/foglio-ore-excel', [HoursReportExcelController::class, '__invoke'])
-    ->name('reports.foglio-ore-excel');
+Route::middleware(['auth'])->group(function () {
+    Route::get('/reports/foglio-ore-excel', [HoursReportExcelController::class, '__invoke'])
+        ->name('reports.foglio-ore-excel');
+});
 
