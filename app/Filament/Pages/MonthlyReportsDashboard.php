@@ -71,6 +71,11 @@ class MonthlyReportsDashboard extends Page implements HasForms, HasTable
                 ->label('Rigenera report mese attuale')
                 ->icon('heroicon-o-arrow-path')
                 ->requiresConfirmation()
+                ->visible(function () {
+                    $user = auth()->user();
+
+                    return $user && ($user->can('rigenera_report') || $user->hasAnyRole(['admin', 'supervisor']));
+                })
                 ->action(function () {
                     [$start, $end] = $this->currentPeriodRange(CarbonImmutable::now()->format('Y-m'));
 

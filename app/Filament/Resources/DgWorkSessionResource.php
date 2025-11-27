@@ -149,6 +149,15 @@ class DgWorkSessionResource extends Resource
                     ->color(fn ($record) => $record->has_anomalies ? 'danger' : 'success'),
             ])
             ->filters([
+                Filter::make('recent')
+                    ->label('Ultimo mese')
+                    ->default()
+                    ->query(function (Builder $query) {
+                        $start = Carbon::now()->subMonth()->startOfMonth();
+                        $end = Carbon::now()->endOfMonth();
+
+                        return $query->whereBetween('session_date', [$start, $end]);
+                    }),
               SelectFilter::make('user_id')
                     ->label('Dipendente')
                     ->relationship('user', 'full_name')
