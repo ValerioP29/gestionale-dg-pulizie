@@ -12,7 +12,6 @@ class DgWorkSession extends Model
     use HasFactory, LogsActivity;
 
     protected $table = 'dg_work_sessions';
-    protected $touches = ['user'];
     protected $fillable = [
         'user_id',
         'site_id',
