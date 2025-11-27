@@ -11,6 +11,7 @@ use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Filament\Tables\Actions\Action;
+use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Storage;
 use Filament\Notifications\Notification;
 use Livewire\Features\SupportFileUploads\TemporaryUploadedFile;
@@ -170,24 +171,36 @@ class DgPayslipResource extends Resource
 
                         $zipPath = $data['zip'];
                         $disk = config('filesystems.default');
+                        $diskConfig = config("filesystems.disks.{$disk}", []);
+                        $filesystem = Storage::disk($disk);
+                        $isLocalDisk = ($diskConfig['driver'] ?? null) === 'local';
 
-                        $localZip = Storage::disk($disk)->path($zipPath);
+                        $tempBase = storage_path('app/tmp/payslips');
+                        File::ensureDirectoryExists($tempBase);
+
+                        if ($isLocalDisk) {
+                            $localZip = $filesystem->path($zipPath);
+                            if (!is_file($localZip)) {
+                                throw new \Exception('File ZIP non trovato su disco locale');
+                            }
+                        } else {
+                            $localZip = tempnam($tempBase, 'zip_');
+                            File::put($localZip, $filesystem->get($zipPath));
+                        }
+
                         $zip = new ZipArchive;
 
                         if ($zip->open($localZip) !== true) {
                             throw new \Exception("File ZIP non leggibile");
                         }
 
-                        $extractTo = Storage::disk($disk)->path('payslips/import/extracted');
-
-                        if (!file_exists($extractTo)) {
-                            mkdir($extractTo, 0777, true);
-                        }
+                        $extractTo = $tempBase . '/extract_' . uniqid();
+                        File::ensureDirectoryExists($extractTo);
 
                         $zip->extractTo($extractTo);
                         $zip->close();
 
-                        $files = scandir($extractTo);
+                        $files = scandir($extractTo) ?: [];
 
                         foreach ($files as $pdf) {
                             if (!str_ends_with(strtolower($pdf), '.pdf')) {
@@ -196,7 +209,7 @@ class DgPayslipResource extends Resource
 
                             $filename = $pdf;
                             $fullPath = $extractTo . '/' . $pdf;
-                            $content = file_get_contents($fullPath);
+                            $content = File::get($fullPath);
 
                             $matchedUser = self::matchUserFromFilename($filename);
 
@@ -254,6 +267,12 @@ class DgPayslipResource extends Resource
 
                             @unlink($fullPath);
                         }
+
+                        if ($isLocalDisk === false) {
+                            @unlink($localZip);
+                        }
+
+                        File::deleteDirectory($extractTo);
 
                         Notification::make()
                             ->title('Importazione completata')

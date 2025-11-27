@@ -50,7 +50,7 @@ class GenerateReportsCache implements ShouldQueue
         $calendar = new JustificationCalendar();
 
         try {
-            $sessions = DgWorkSession::query()
+            $query = DgWorkSession::query()
                 ->select([
                     'id',
                     'user_id',
@@ -62,14 +62,47 @@ class GenerateReportsCache implements ShouldQueue
                 ])
                 ->whereBetween('session_date', [$start->toDateString(), $end->toDateString()])
                 ->whereNotNull('user_id')
-                ->get();
+                ->orderBy('id');
 
-            $grouped = $sessions->groupBy([
-                fn (DgWorkSession $session) => $session->user_id,
-                fn (DgWorkSession $session) => $session->resolved_site_id ?? $session->site_id,
-            ], preserveKeys: true);
+            $aggregates = [];
+            $userIds = [];
 
-            if ($grouped->isEmpty()) {
+            $query->chunkById(1000, function (Collection $sessions) use (&$aggregates, &$userIds) {
+                foreach ($sessions as $session) {
+                    $siteId = $session->resolved_site_id ?? $session->site_id;
+
+                    if ($siteId === null) {
+                        continue;
+                    }
+
+                    $key = $session->user_id.'|'.$siteId;
+
+                    if (! isset($aggregates[$key])) {
+                        $aggregates[$key] = [
+                            'user_id' => $session->user_id,
+                            'site_id' => $siteId,
+                            'worked_minutes' => 0,
+                            'overtime_minutes' => 0,
+                            'session_ids' => [],
+                            'dates' => [],
+                        ];
+                    }
+
+                    $aggregates[$key]['worked_minutes'] += (int) $session->worked_minutes;
+                    $aggregates[$key]['overtime_minutes'] += (int) $session->overtime_minutes;
+
+                    if ((int) $session->worked_minutes > 0) {
+                        $aggregates[$key]['dates'][$session->session_date] = true;
+                    }
+
+                    $aggregates[$key]['session_ids'][] = $session->id;
+                    $userIds[$session->user_id] = true;
+                }
+
+                return true;
+            });
+
+            if (empty($aggregates)) {
                 Log::info('ReportsCache: nessuna sessione da processare', [
                     'period_start' => $start->toDateString(),
                     'period_end' => $end->toDateString(),
@@ -85,102 +118,103 @@ class GenerateReportsCache implements ShouldQueue
                 return;
             }
 
-            $userIds = $grouped->keys()->all();
+            $userIds = array_keys($userIds);
             $users = $this->loadUsers($userIds);
             $contractWorkingDays = $this->calculateUserWorkingDays($users, $start, $end);
             $assignments = $this->loadAssignments($userIds, $start, $end);
+
+            $sitesPerUser = [];
+
+            foreach ($aggregates as $aggregate) {
+                $sitesPerUser[$aggregate['user_id']] ??= [];
+                $sitesPerUser[$aggregate['user_id']][$aggregate['site_id']] = true;
+            }
 
             $processed = 0;
             $justificationsProcessed = 0;
             $anomaliesProcessed = 0;
 
-            foreach ($grouped as $userId => $bySite) {
-                foreach ($bySite as $siteId => $records) {
-                    if ($siteId === null || $records->isEmpty()) {
-                        continue;
-                    }
+            foreach ($aggregates as $aggregate) {
+                $userId = $aggregate['user_id'];
+                $siteId = $aggregate['site_id'];
 
-                    $sessionIds = $records->pluck('id')->all();
-                    $workedMinutes = max(0, (int) $records->sum('worked_minutes'));
-                    $overtimeMinutes = max(0, (int) $records->sum('overtime_minutes'));
-                    $workedHours = round($workedMinutes / 60, 2);
-                    $daysPresent = $records->where('worked_minutes', '>', 0)
-                        ->pluck('session_date')
-                        ->unique()
-                        ->count();
+                $sessionIds = $aggregate['session_ids'];
+                $workedMinutes = max(0, (int) $aggregate['worked_minutes']);
+                $overtimeMinutes = max(0, (int) $aggregate['overtime_minutes']);
+                $workedHours = round($workedMinutes / 60, 2);
+                $daysPresent = count($aggregate['dates']);
 
-                    $user = $users[$userId] ?? null;
-                    $sitesForUser = $bySite->keys()->count();
-                    $assignmentSet = $assignments->get($userId, collect())->get($siteId, collect());
-                    $expectedDays = $this->calculateExpectedDaysForSite(
-                        $start->copy(),
-                        $end->copy(),
-                        $user,
-                        $assignmentSet,
-                        $sitesForUser,
-                        $daysPresent,
-                        $contractWorkingDays[$userId] ?? 0,
-                    );
+                $user = $users[$userId] ?? null;
+                $sitesForUser = isset($sitesPerUser[$userId]) ? count($sitesPerUser[$userId]) : 0;
+                $assignmentSet = $assignments->get($userId, collect())->get($siteId, collect());
+                $expectedDays = $this->calculateExpectedDaysForSite(
+                    $start->copy(),
+                    $end->copy(),
+                    $user,
+                    $assignmentSet,
+                    $sitesForUser,
+                    $daysPresent,
+                    $contractWorkingDays[$userId] ?? 0,
+                );
 
-                    $anomaliesQuery = DgAnomaly::query()
-                        ->whereBetween('date', [$start->toDateString(), $end->toDateString()])
-                        ->where('user_id', $userId);
+                $anomaliesQuery = DgAnomaly::query()
+                    ->whereBetween('date', [$start->toDateString(), $end->toDateString()])
+                    ->where('user_id', $userId);
 
-                    if (! empty($sessionIds)) {
-                        $anomaliesQuery->whereIn('session_id', $sessionIds);
-                    } else {
-                        $anomaliesQuery->whereRaw('1 = 0');
-                    }
+                if (! empty($sessionIds)) {
+                    $anomaliesQuery->whereIn('session_id', $sessionIds);
+                } else {
+                    $anomaliesQuery->whereRaw('1 = 0');
+                }
 
-                    $lateEntries = (clone $anomaliesQuery)->where('type', 'late_entry')->count();
-                    $earlyExits = (clone $anomaliesQuery)->where('type', 'early_exit')->count();
-                    $absencesAnomalies = (clone $anomaliesQuery)->where('type', 'absence')->count();
+                $lateEntries = (clone $anomaliesQuery)->where('type', 'late_entry')->count();
+                $earlyExits = (clone $anomaliesQuery)->where('type', 'early_exit')->count();
+                $absencesAnomalies = (clone $anomaliesQuery)->where('type', 'absence')->count();
 
-                    $anomaliesProcessed += $lateEntries + $earlyExits + $absencesAnomalies;
+                $anomaliesProcessed += $lateEntries + $earlyExits + $absencesAnomalies;
 
-                    $justifiedDays = $this->countJustifiedDaysForSite(
-                        $calendar,
-                        $userId,
-                        $start->copy(),
-                        $end->copy(),
-                        $assignmentSet,
-                        $sitesForUser
-                    );
+                $justifiedDays = $this->countJustifiedDaysForSite(
+                    $calendar,
+                    $userId,
+                    $start->copy(),
+                    $end->copy(),
+                    $assignmentSet,
+                    $sitesForUser
+                );
 
-                    $justificationsProcessed += $justifiedDays;
+                $justificationsProcessed += $justifiedDays;
 
-                    $contractAbsences = max(0, $expectedDays - $daysPresent - $justifiedDays);
-                    $daysAbsent = max($absencesAnomalies, $contractAbsences);
+                $contractAbsences = max(0, $expectedDays - $daysPresent - $justifiedDays);
+                $daysAbsent = max($absencesAnomalies, $contractAbsences);
 
-                    DgReportCache::updateOrCreate(
-                        [
-                            'user_id' => $userId,
-                            'site_id' => $siteId,
-                            'period_start' => $start->toDateString(),
-                            'period_end' => $end->toDateString(),
-                        ],
-                        [
-                            'resolved_site_id' => $siteId,
-                            'worked_hours' => $workedHours,
-                            'days_present' => $daysPresent,
-                            'days_absent' => $daysAbsent,
-                            'late_entries' => $lateEntries,
-                            'early_exits' => $earlyExits,
-                            'overtime_minutes' => $overtimeMinutes,
-                            'generated_at' => now(),
-                            'is_final' => false,
-                        ],
-                    );
+                DgReportCache::updateOrCreate(
+                    [
+                        'user_id' => $userId,
+                        'site_id' => $siteId,
+                        'period_start' => $start->toDateString(),
+                        'period_end' => $end->toDateString(),
+                    ],
+                    [
+                        'resolved_site_id' => $siteId,
+                        'worked_hours' => $workedHours,
+                        'days_present' => $daysPresent,
+                        'days_absent' => $daysAbsent,
+                        'late_entries' => $lateEntries,
+                        'early_exits' => $earlyExits,
+                        'overtime_minutes' => $overtimeMinutes,
+                        'generated_at' => now(),
+                        'is_final' => false,
+                    ],
+                );
 
-                    $processed++;
+                $processed++;
 
-                    if ($processed % 25 === 0) {
-                        ReportsCacheStatus::refresh([
-                            'period_start' => $start->toDateString(),
-                            'period_end' => $end->toDateString(),
-                            'records' => $processed,
-                        ]);
-                    }
+                if ($processed % 25 === 0) {
+                    ReportsCacheStatus::refresh([
+                        'period_start' => $start->toDateString(),
+                        'period_end' => $end->toDateString(),
+                        'records' => $processed,
+                    ]);
                 }
             }
 

@@ -19,5 +19,12 @@ class RouteServiceProvider extends ServiceProvider
             $key = sprintf('%s|%s', $request->ip(), (string) $request->input('email'));
             return Limit::perMinute(10)->by($key);
         });
+
+        // Limite per download buste paga: 20/min per utente o IP
+        RateLimiter::for('payslip-downloads', function (Request $request) {
+            $identifier = $request->user()?->id ?? $request->ip();
+
+            return Limit::perMinute(20)->by($identifier);
+        });
     }
 }
