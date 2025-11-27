@@ -3,12 +3,19 @@
 namespace App\Http\Controllers\Reports;
 
 use App\Exports\MonthlyHoursExport;
+use App\Models\DgReportCache;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
+use Illuminate\Support\Facades\Gate;
 use Maatwebsite\Excel\Facades\Excel;
 
 class HoursReportExcelController
 {
+    use AuthorizesRequests;
+
     public function __invoke()
     {
+        Gate::authorize('viewAny', DgReportCache::class);
+
         $year  = request('year');
         $month = request('month');
 

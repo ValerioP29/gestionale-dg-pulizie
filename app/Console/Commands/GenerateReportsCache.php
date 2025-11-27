@@ -35,12 +35,12 @@ class GenerateReportsCache extends Command
             'source' => 'cli',
         ]);
 
-        GenerateReportsCacheJob::dispatchSync(
+        GenerateReportsCacheJob::dispatch(
             $start->toDateString(),
             $end->toDateString()
         );
 
-        $this->info('✅ Cache dei report rigenerata tramite job dedicato');
+        $this->info('✅ Job di rigenerazione report messo in coda');
         Log::info("Report cache aggiornato per {$month}/{$year}");
     }
 }

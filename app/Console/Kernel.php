@@ -32,13 +32,13 @@ class Kernel extends ConsoleKernel
                 $previousStart = $currentStart->subMonth()->startOfMonth();
                 $previousEnd = $previousStart->endOfMonth();
 
-                GenerateReportsCache::dispatchSync(
+                GenerateReportsCache::dispatch(
                     $previousStart->toDateString(),
                     $previousEnd->toDateString()
                 );
             }
 
-            GenerateReportsCache::dispatchSync(
+            GenerateReportsCache::dispatch(
                 $currentStart->toDateString(),
                 $currentEnd->toDateString()
             );

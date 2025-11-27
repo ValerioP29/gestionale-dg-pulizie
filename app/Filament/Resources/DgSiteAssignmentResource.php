@@ -16,6 +16,7 @@ use Illuminate\Validation\ValidationException;
 class DgSiteAssignmentResource extends Resource
 {
     protected static ?string $model = DgSiteAssignment::class;
+    protected static ?string $policy = \App\Policies\DgSiteAssignmentPolicy::class;
 
     // Non deve più comparire nel menu laterale
     protected static bool $shouldRegisterNavigation = false;
