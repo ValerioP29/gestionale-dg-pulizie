@@ -22,6 +22,7 @@ use Illuminate\Support\Carbon;
 class DgAnomalyResource extends Resource
 {
     protected static ?string $model = DgAnomaly::class;
+    protected static ?string $policy = \App\Policies\DgAnomalyPolicy::class;
     protected static ?string $navigationGroup = 'Gestione Cantieri';
     protected static ?string $navigationIcon = 'heroicon-o-exclamation-circle';
     protected static ?string $modelLabel = 'Anomalia';
@@ -215,6 +216,7 @@ class DgAnomalyResource extends Resource
                     ->label('Approva')
                     ->icon('heroicon-o-check-circle')
                     ->color('success')
+                    ->authorize(fn (\App\Models\User $user, DgAnomaly $record) => $user->can('update', $record))
                     ->form([
                         Forms\Components\Textarea::make('note_admin')
                             ->label('Motivazione approvazione (opzionale)')
@@ -238,6 +240,7 @@ class DgAnomalyResource extends Resource
                     ->label('Respingi')
                     ->icon('heroicon-o-x-circle')
                     ->color('danger')
+                    ->authorize(fn (\App\Models\User $user, DgAnomaly $record) => $user->can('update', $record))
                     ->form([
                         Forms\Components\Textarea::make('note_admin')
                             ->label('Motivazione del rifiuto')
@@ -267,6 +270,7 @@ class DgAnomalyResource extends Resource
                     ->icon('heroicon-o-check-circle')
                     ->color('success')
                     ->requiresConfirmation()
+                    ->authorize(fn (\App\Models\User $user) => $user->can('update', DgAnomaly::make()))
                     ->action(function ($records) {
                         $actor = auth()->user();
                         if (! $actor) {
@@ -286,6 +290,7 @@ class DgAnomalyResource extends Resource
                     ->icon('heroicon-o-x-circle')
                     ->color('danger')
                     ->requiresConfirmation()
+                    ->authorize(fn (\App\Models\User $user) => $user->can('update', DgAnomaly::make()))
                     ->action(function ($records) {
                         $actor = auth()->user();
                         if (! $actor) {

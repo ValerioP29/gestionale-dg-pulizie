@@ -22,6 +22,7 @@ use Illuminate\Support\Carbon;
 class DgWorkSessionResource extends Resource
 {
     protected static ?string $model = DgWorkSession::class;
+    protected static ?string $policy = \App\Policies\DgWorkSessionPolicy::class;
     protected static ?string $navigationGroup = 'Gestione Cantieri';
     protected static ?string $navigationIcon = 'heroicon-o-clock';
     protected static ?string $modelLabel = 'Sessione di lavoro';
@@ -205,6 +206,7 @@ class DgWorkSessionResource extends Resource
                     ->icon('heroicon-o-check-circle')
                     ->color('success')
                     ->requiresConfirmation()
+                    ->authorize(fn (\App\Models\User $user) => $user->can('update', DgWorkSession::make()))
                     ->action(function ($records) {
                         $actor = auth()->user();
                         if (! $actor) {
@@ -224,6 +226,7 @@ class DgWorkSessionResource extends Resource
                     ->icon('heroicon-o-arrow-path')
                     ->color('warning')
                     ->requiresConfirmation()
+                    ->authorize(fn (\App\Models\User $user) => $user->can('update', DgWorkSession::make()))
                     ->action(function ($records) {
                         $engine = new AnomalyEngine();
                         foreach ($records as $session) {

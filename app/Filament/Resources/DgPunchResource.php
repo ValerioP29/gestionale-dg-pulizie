@@ -13,6 +13,7 @@ use Filament\Resources\Resource;
 class DgPunchResource extends Resource
 {
     protected static ?string $model = DgPunch::class;
+    protected static ?string $policy = \App\Policies\DgPunchPolicy::class;
     protected static ?string $navigationGroup = 'Gestione Cantieri';
     protected static ?string $navigationIcon = 'heroicon-o-finger-print';
     protected static ?string $modelLabel = 'Timbratura';

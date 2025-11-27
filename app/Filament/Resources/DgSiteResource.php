@@ -15,6 +15,7 @@ use Filament\Tables\Filters\SelectFilter;
 class DgSiteResource extends Resource
 {
     protected static ?string $model = DgSite::class;
+    protected static ?string $policy = \App\Policies\DgSitePolicy::class;
 
     protected static ?string $navigationIcon = 'heroicon-o-building-office';
     protected static ?string $navigationGroup = 'Anagrafica';
