@@ -65,17 +65,29 @@ class EmployeeReport extends Page implements HasForms
         return [
             Forms\Components\Select::make('user_id')
                 ->label('Dipendente')
-                ->options(
-                    User::query()
+                ->searchable()
+                ->preload(false)
+                ->getSearchResultsUsing(function (string $search): array {
+                    $query = User::query()
                         ->orderBy('last_name')
                         ->orderBy('first_name')
+                        ->limit(50);
+
+                    if (trim($search) !== '') {
+                        $query->where(function ($q) use ($search) {
+                            $q->where('first_name', 'ilike', "%{$search}%")
+                                ->orWhere('last_name', 'ilike', "%{$search}%");
+                        });
+                    }
+
+                    return $query
                         ->get()
                         ->mapWithKeys(fn ($u) => [
-                            $u->id => $u->full_name
+                            $u->id => $u->full_name,
                         ])
-                        ->toArray()
-                )
-                ->searchable()
+                        ->toArray();
+                })
+                ->getOptionLabelUsing(fn ($value): ?string => User::find($value)?->full_name)
                 ->placeholder('Seleziona dipendente')
                 ->reactive()
                 ->afterStateUpdated(function ($state) {
