@@ -121,6 +121,29 @@ develop	Sviluppo
 feature/*	Funzionalità
 hotfix/*	Correzioni urgenti
 
+## 🧵 Queue worker (produzione)
+
+Per eseguire in modo asincrono i job notturni (calcolo sessioni, rigenerazione report, marcatura report finali):
+
+1. Imposta `QUEUE_CONNECTION=database` (o `redis` se l'infrastruttura è disponibile) e avvia le migration per la coda (`php artisan queue:table && php artisan migrate`).
+2. Avvia un worker dedicato: `php artisan queue:work --tries=3 --backoff=10` e ricaricalo con `php artisan queue:restart` dopo ogni deploy.
+3. Scheduler cron: `* * * * * php /path/to/artisan schedule:run >> /dev/null 2>&1`.
+
+Esempio di configurazione Supervisor (`/etc/supervisor/conf.d/gestionale-queue.conf`):
+
+```
+[program:gestionale-queue]
+process_name=%(program_name)s_%(process_num)02d
+command=php /var/www/html/artisan queue:work --sleep=3 --tries=3 --backoff=10
+autostart=true
+autorestart=true
+user=www-data
+numprocs=1
+redirect_stderr=true
+stdout_logfile=/var/log/supervisor/gestionale-queue.log
+stopwaitsecs=3600
+```
+
 🧾 Licenza
 
 Software proprietario © 2025 DG Pulizie.
