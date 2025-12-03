@@ -7,6 +7,7 @@ use Spatie\Activitylog\Traits\LogsActivity;
 
 class DgAnomaly extends Model
 {
+    
     use LogsActivity;
 
     protected $table = 'dg_anomalies';
