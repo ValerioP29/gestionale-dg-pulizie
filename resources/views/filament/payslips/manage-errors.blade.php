@@ -30,39 +30,34 @@
                                     Correggi {{ $e->file_name }}
                                 </x-slot>
 
-                                <form wire:submit="fixError({{ $e->id }})" class="space-y-3">
+                              <form wire:submit="fixError({{ $e->id }})" class="space-y-3">
 
-                                    <x-filament::input.wrapper>
-                                        <x-filament::input.select
-                                            wire:model.defer="form.user_id"
-                                            :options="\App\Models\User::orderBy('last_name')->pluck('last_name', 'id')"
-                                            placeholder="Seleziona dipendente"
-                                        />
-                                    </x-filament::input.wrapper>
+                                <x-filament::select
+                                    wire:model.defer="form.user_id"
+                                    :options="\App\Models\User::orderBy('last_name')->pluck('last_name', 'id')"
+                                    placeholder="Seleziona dipendente"
+                                />
 
-                                    <x-filament::input.wrapper>
-                                        <x-filament::input.select
-                                            wire:model.defer="form.period_month"
-                                            :options="[1=>'Gen',2=>'Feb',3=>'Mar',4=>'Apr',5=>'Mag',6=>'Giu',7=>'Lug',8=>'Ago',9=>'Set',10=>'Ott',11=>'Nov',12=>'Dic']"
-                                            placeholder="Mese"
-                                        />
-                                    </x-filament::input.wrapper>
+                                <x-filament::select
+                                    wire:model.defer="form.period_month"
+                                    :options="[1=>'Gen',2=>'Feb',3=>'Mar',4=>'Apr',5=>'Mag',6=>'Giu',7=>'Lug',8=>'Ago',9=>'Set',10=>'Ott',11=>'Nov',12=>'Dic']"
+                                    placeholder="Mese"
+                                />
 
-                                    <x-filament::input.wrapper>
-                                        <x-filament::input.text
-                                            wire:model.defer="form.period_year"
-                                            type="number"
-                                            placeholder="Anno"
-                                        />
-                                    </x-filament::input.wrapper>
+                                <x-filament::text-input
+                                    wire:model.defer="form.period_year"
+                                    type="number"
+                                    placeholder="Anno"
+                                />
 
-                                    <div class="flex justify-end">
-                                        <x-filament::button type="submit" color="success">
-                                            Salva
-                                        </x-filament::button>
-                                    </div>
+                                <div class="flex justify-end">
+                                    <x-filament::button type="submit" color="success">
+                                        Salva
+                                    </x-filament::button>
+                                </div>
 
-                                </form>
+                            </form>
+                                    
 
                             </x-filament::modal>
                         </td>
