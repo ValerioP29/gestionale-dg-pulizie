@@ -75,7 +75,7 @@ class ListDgPayslips extends ListRecords implements HasForms
 
         $this->validate();
 
-        $data = $this->form->getState();
+        $data = $this->fixFormData;
 
         $record = DgPayslip::findOrFail($this->currentErrorId);
 
@@ -127,12 +127,10 @@ class ListDgPayslips extends ListRecords implements HasForms
 
     protected function fillDefaultForm(): void
     {
-        $this->form->fill(
-            [
-                'user_id' => null,
-                'period_month' => now()->month,
-                'period_year' => now()->year,
-            ]
-        );
+        $this->fixFormData = [
+          'user_id' => null,
+          'period_month' => now()->month,
+          'period_year' => now()->year,
+      ];
     }
 }
