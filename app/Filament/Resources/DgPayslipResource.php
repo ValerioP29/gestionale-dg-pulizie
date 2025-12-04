@@ -123,10 +123,11 @@ class DgPayslipResource extends Resource
                         Forms\Components\FileUpload::make('file')
                             ->label('Documento PDF')
                             ->acceptedFileTypes(['application/pdf'])
-                            ->required()
-                            // usiamo solo lo storage temporaneo di Livewire,
-                            // poi spostiamo noi sul disco definitivo
-                            ->directory('tmp/payslips'),
+                            ->directory('tmp/payslips') // puoi anche lasciarlo così
+                            ->enableDownload(false)
+                            ->enableOpen(false)
+                            ->enablePreview(false)
+                            ->required(),
                     ])
                     ->action(function (array $data) {
                         $disk = config('filesystems.default');
