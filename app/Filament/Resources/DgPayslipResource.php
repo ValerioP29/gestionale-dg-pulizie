@@ -120,13 +120,10 @@ class DgPayslipResource extends Resource
                             ->default(today()->year)
                             ->required(),
 
-                        Forms\Components\FileUpload::make('file')
+                       Forms\Components\FileUpload::make('file')
                             ->label('Documento PDF')
                             ->acceptedFileTypes(['application/pdf'])
-                            ->directory('tmp/payslips') // puoi anche lasciarlo così
-                            ->enableDownload(false)
-                            ->enableOpen(false)
-                            ->enablePreview(false)
+                            ->directory('tmp/payslips')
                             ->required(),
                     ])
                     ->action(function (array $data) {
