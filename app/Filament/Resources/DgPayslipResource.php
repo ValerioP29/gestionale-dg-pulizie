@@ -58,16 +58,23 @@ class DgPayslipResource extends Resource
                     ->dateTime('d/m/Y')
                     ->sortable(),
 
-                Tables\Columns\IconColumn::make('download')
+               Tables\Columns\IconColumn::make('download')
                     ->label('Scarica')
                     ->icon('heroicon-o-arrow-down-tray')
                     ->action(function (DgPayslip $record) {
+                        
                         $record->increment('downloads_count');
                         $record->downloaded_at = now();
                         $record->save();
 
-                        return Storage::disk($record->storage_disk)
-                            ->download($record->file_path, $record->file_name);
+                        $disk = Storage::disk($record->storage_disk);
+
+                        $url = $disk->temporaryUrl(
+                            $record->file_path,
+                            now()->addMinutes(5),
+                        );
+
+                        return redirect()->away($url);
                     }),
             ])
             ->defaultSort('created_at', 'desc')
