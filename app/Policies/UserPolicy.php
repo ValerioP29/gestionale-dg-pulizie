@@ -38,7 +38,7 @@ class UserPolicy
 
         // supervisor NON può toccare admin né altri supervisor
         if ($user->role === 'supervisor') {
-            return in_array($target->role, ['viewer', 'employee']);
+            return in_array($target->role, ['supervisor','viewer', 'employee']);
         }
 
         // admin può modificare chiunque tranne se stesso
