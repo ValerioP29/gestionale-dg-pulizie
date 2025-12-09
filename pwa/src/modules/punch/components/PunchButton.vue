@@ -77,7 +77,7 @@ async function handlePunch() {
   <div class="space-y-3">
     <button
       type="button"
-      class="flex w-full items-center justify-center rounded-lg bg-blue-600 p-4 text-base font-semibold text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-200 disabled:cursor-not-allowed disabled:opacity-70"
+      class="flex w-full items-center justify-center rounded-2xl bg-blue-600 px-6 py-5 text-lg font-semibold text-white shadow-lg transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-200 disabled:cursor-not-allowed disabled:opacity-70"
       :disabled="loading"
       @click="handlePunch"
     >
