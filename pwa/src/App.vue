@@ -1,12 +1,18 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useRoute, RouterView } from 'vue-router'
+import { useConnectivityStore } from './stores/connectivity'
 
 const route = useRoute()
+const connectivityStore = useConnectivityStore()
 
 const wrapperClasses = computed(() =>
   route.name === 'login' ? 'mx-auto max-w-md p-6' : ''
 )
+
+onMounted(() => {
+  connectivityStore.startTracking()
+})
 </script>
 
 <template>

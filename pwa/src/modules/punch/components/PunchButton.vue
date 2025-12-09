@@ -47,6 +47,11 @@ async function handlePunch() {
       return
     }
 
+    if (result.queued) {
+      warningMessages.value = []
+      return
+    }
+
     warningMessages.value = (result.warnings || []).map(translateWarning)
     await sessionStore.loadCurrent()
 

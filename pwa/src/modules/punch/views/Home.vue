@@ -1,12 +1,16 @@
 <script setup>
 import { computed, onMounted } from 'vue'
 import { useSessionStore } from '../../../stores/session'
+import { useConnectivityStore } from '../../../stores/connectivity'
 import PunchButton from '../components/PunchButton.vue'
 
 const sessionStore = useSessionStore()
+const connectivityStore = useConnectivityStore()
 
 onMounted(() => {
   sessionStore.loadCurrent()
+  sessionStore.setupOfflineSync()
+  sessionStore.flushOfflinePunches()
 })
 
 const assignedSiteName = computed(
@@ -42,11 +46,33 @@ const checkInTime = computed(() => {
 
   return parsed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 })
+
+const connectivityLabel = computed(() =>
+  connectivityStore.isOnline
+    ? 'Online'
+    : 'Offline – le timbrature verranno sincronizzate'
+)
+
+const connectivityPillClasses = computed(() =>
+  connectivityStore.isOnline
+    ? 'bg-green-50 text-green-700 ring-1 ring-green-100'
+    : 'bg-amber-50 text-amber-700 ring-1 ring-amber-100'
+)
 </script>
 
 <template>
   <section class="space-y-6">
     <p class="text-sm text-slate-600">Benvenuto nella PWA di DG Pulizie.</p>
+
+    <div class="flex items-center gap-2 text-xs font-semibold text-slate-700">
+      <span
+        class="inline-flex items-center gap-2 rounded-full px-3 py-1"
+        :class="connectivityPillClasses"
+      >
+        <span class="h-2.5 w-2.5 rounded-full" :class="{ 'bg-green-500': connectivityStore.isOnline, 'bg-amber-500': !connectivityStore.isOnline }"></span>
+        {{ connectivityLabel }}
+      </span>
+    </div>
 
     <div class="space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
       <div class="space-y-2">
