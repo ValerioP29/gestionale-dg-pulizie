@@ -6,4 +6,6 @@ export const ENDPOINTS = {
   me: '/api/me',
   current: '/api/mobile/work-sessions/current',
   punch: '/api/mobile/work-sessions/punch',
+  payrollList: '/api/mobile/payroll',
+  payrollDownload: (id) => `/api/mobile/payroll/${id}/download`,
 };
