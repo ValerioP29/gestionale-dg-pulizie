@@ -56,8 +56,6 @@ export const useSessionStore = defineStore('session', {
         console.error('Errore durante la timbratura:', error)
         return { success: false, warnings: [] }
       }
-
-      return { success: false, warnings: [] }
     },
   },
 })
