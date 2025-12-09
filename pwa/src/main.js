@@ -12,4 +12,7 @@ app.use(router);
 
 app.mount('#app');
 
-registerPWA();
+if ('serviceWorker' in navigator) {
+  registerPWA();
+}
+

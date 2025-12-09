@@ -3,9 +3,9 @@ import vue from '@vitejs/plugin-vue'
 import { VitePWA } from 'vite-plugin-pwa'
 
 const pwaManifest = {
-  name: 'DG Pulizie PWA',
+  name: 'DG Pulizie',
   short_name: 'DG Pulizie',
-  description: 'PWA mobile per DG Pulizie',
+  description: 'PWA geobadge + buste paga per dipendenti DG Pulizie',
   theme_color: '#0f172a',
   background_color: '#f8fafc',
   display: 'standalone',
@@ -13,7 +13,12 @@ const pwaManifest = {
   icons: [
     { src: '/pwa-192x192.png', sizes: '192x192', type: 'image/png' },
     { src: '/pwa-512x512.png', sizes: '512x512', type: 'image/png' },
-    { src: '/mask-icon.svg', sizes: '512x512', type: 'image/svg+xml', purpose: 'any maskable' },
+    {
+      src: '/pwa-512x512.png',
+      sizes: '512x512',
+      type: 'image/png',
+      purpose: 'any maskable',
+    },
   ],
 }
 
