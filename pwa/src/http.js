@@ -1,7 +1,8 @@
+import router from './router'
 import { API_BASE_URL } from './endpoints'
-import { clearToken, getToken } from '../utils/storage'
+import { clearToken, getToken } from './utils/storage'
 
-async function buildRequest(path, options = {}) {
+async function request(path, options = {}) {
   const token = getToken()
   const headers = {
     'Content-Type': 'application/json',
@@ -12,26 +13,26 @@ async function buildRequest(path, options = {}) {
     headers.Authorization = `Bearer ${token}`
   }
 
-  const { body, ...rest } = options
-  const requestInit = {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
     method: options.method || 'GET',
     headers,
-    ...rest,
-  }
-
-  if (body !== undefined) {
-    requestInit.body = typeof body === 'string' ? body : JSON.stringify(body)
-  }
-
-  return fetch(`${API_BASE_URL}${path}`, requestInit)
-}
-
-export async function http(path, options) {
-  const response = await buildRequest(path, options)
+    ...options,
+  })
 
   if (response.status === 401) {
     clearToken()
+    if (router.currentRoute.value.path !== '/login') {
+      router.replace('/login')
+    }
   }
 
   return response
+}
+
+export function apiGet(path) {
+  return request(path, { method: 'GET' })
+}
+
+export function apiPost(path, body) {
+  return request(path, { method: 'POST', body: JSON.stringify(body) })
 }
