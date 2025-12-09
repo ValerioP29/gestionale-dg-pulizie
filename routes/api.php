@@ -16,4 +16,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
     Route::get('/mobile/work-sessions/current', [WorkSessionController::class, 'current'])
         ->middleware('throttle:60,1');
+
+    Route::post('/mobile/work-sessions/punch', [WorkSessionController::class, 'punch'])
+        ->middleware('throttle:60,1');
 });
