@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\Mobile\PayrollController;
 use App\Http\Controllers\Api\Mobile\WorkSessionController;
 use Illuminate\Support\Facades\Route;
 
@@ -19,4 +20,9 @@ Route::middleware(['auth:sanctum'])->group(function () {
 
     Route::post('/mobile/work-sessions/punch', [WorkSessionController::class, 'punch'])
         ->middleware('throttle:60,1');
+
+    Route::prefix('mobile/payroll')->middleware('throttle:60,1')->group(function () {
+        Route::get('/', [PayrollController::class, 'index']);
+        Route::get('/{id}/download', [PayrollController::class, 'download']);
+    });
 });
