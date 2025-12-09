@@ -341,7 +341,8 @@ class MonthlyReportsDashboard extends Page implements HasForms, HasTable
     protected function buildMonthlyQuery(CarbonImmutable $start, CarbonImmutable $end): Builder
     {
         return DgReportCache::query()
-            ->whereBetween('period_start', [$start->toDateString(), $end->toDateString()])
-            ->whereBetween('period_end', [$start->toDateString(), $end->toDateString()]);
+            ->whereDate('period_start', $start->toDateString())
+            ->whereDate('period_end', $end->toDateString());
     }
+
 }

@@ -57,6 +57,7 @@ class GenerateReportsCache implements ShouldQueue
                     'site_id',
                     'resolved_site_id',
                     'session_date',
+                    'extra_minutes',
                     'worked_minutes',
                     'overtime_minutes',
                 ])
@@ -88,11 +89,17 @@ class GenerateReportsCache implements ShouldQueue
                         ];
                     }
 
-                    $aggregates[$key]['worked_minutes'] += (int) $session->worked_minutes;
+                    $minutes = max(
+                        0,
+                        (int) $session->worked_minutes + (int) ($session->extra_minutes ?? 0),
+                    );
+
+                    $aggregates[$key]['worked_minutes'] += $minutes;
                     $aggregates[$key]['overtime_minutes'] += (int) $session->overtime_minutes;
 
-                    if ((int) $session->worked_minutes > 0) {
-                        $aggregates[$key]['dates'][$session->session_date] = true;
+                    if ($minutes > 0) {
+                        $sessionDate = CarbonImmutable::parse($session->session_date)->toDateString();
+                        $aggregates[$key]['dates'][$sessionDate] = true;
                     }
 
                     $aggregates[$key]['session_ids'][] = $session->id;
@@ -302,8 +309,43 @@ class GenerateReportsCache implements ShouldQueue
             ->groupBy(['user_id', 'site_id']);
     }
 
+    /**
+     * Restringe l'intervallo di calcolo alle date di assunzione / fine contratto.
+     */
+    private function clampToEmploymentPeriod(Carbon $start, Carbon $end, ?User $user): ?array
+    {
+        if (! $user) {
+            return [$start, $end];
+        }
+
+        $hiredAt = $user->hired_at?->copy()->startOfDay();
+        $contractEnd = $user->contract_end_at?->copy()->endOfDay();
+
+        if ($hiredAt && $start->lt($hiredAt)) {
+            $start = $hiredAt->copy();
+        }
+
+        if ($contractEnd && $end->gt($contractEnd)) {
+            $end = $contractEnd->copy();
+        }
+
+        if ($start->gt($end)) {
+            return null;
+        }
+
+        return [$start, $end];
+    }
+
     private function countUserWorkingDays(Carbon $start, Carbon $end, User $user): int
     {
+        $range = $this->clampToEmploymentPeriod($start, $end, $user);
+
+        if ($range === null) {
+            return 0;
+        }
+
+        [$start, $end] = $range;
+
         $days = 0;
         $cursor = $start->copy();
 
@@ -350,6 +392,14 @@ class GenerateReportsCache implements ShouldQueue
         User $user,
         Collection $assignments,
     ): int {
+        $range = $this->clampToEmploymentPeriod($start, $end, $user);
+
+        if ($range === null) {
+            return 0;
+        }
+
+        [$start, $end] = $range;
+
         $ranges = $assignments->map(function ($assignment) {
             return [
                 'from' => $assignment->assigned_from

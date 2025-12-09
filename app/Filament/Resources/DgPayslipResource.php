@@ -120,54 +120,54 @@ class DgPayslipResource extends Resource
                             ->default(today()->year)
                             ->required(),
 
-                       Forms\Components\FileUpload::make('file')
+                        Forms\Components\FileUpload::make('file')
                             ->label('Documento PDF')
                             ->acceptedFileTypes(['application/pdf'])
-                            ->directory('tmp/payslips')
+                            ->disk('local') // <--- Upload locale
+                            ->directory('tmp/payslips') // <--- temp directory
+                            ->preserveFilenames() // <--- così il nome rimane quello del file originale
                             ->required(),
-                    ])
-                    ->action(function (array $data) {
-                        $disk = config('filesystems.default');
+                         ])
+                    ->action(function ($data) {
+                        // Disco finale dove salvare definitivamente (S3)
+                        $disk = config('filesystems.default'); 
                         $storage = Storage::disk($disk);
 
-                        /** @var TemporaryUploadedFile|string|null $uploadedFile */
-                        $uploadedFile = $data['file'] ?? null;
-
-                        if (! $uploadedFile instanceof TemporaryUploadedFile) {
-                            throw new \RuntimeException('Upload file non valido.');
-                        }
+                        // File temporaneo arrivato da Livewire (sul disco locale!)
+                        $uploadedFile = $data['file'];
 
                         $filename = $uploadedFile->getClientOriginalName();
 
+                        // Cartella definitiva S3: /payslips/{user_id}/{YYYY-MM}
                         $directory = sprintf(
                             'payslips/%d/%s',
                             $data['user_id'],
                             sprintf('%d-%02d', $data['period_year'], $data['period_month'])
                         );
 
-                        // salviamo DIRETTAMENTE sul disco finale (local o s3)
-                        $storedPath = $uploadedFile->storeAs($directory, $filename, $disk);
+                        // Percorso completo definitivo
+                        $finalPath = $directory . '/' . $filename;
 
-                        // metadati base (se servono in futuro)
-                        $mimeType = $storage->mimeType($storedPath);
-                        $fileSize = $storage->size($storedPath);
-                        $checksum = sha1($storage->get($storedPath));
+                        // Contenuto del file locale (Livewire temp)
+                        $fileContents = Storage::disk('local')->get($uploadedFile->getRealPath());
 
+                        // Carichiamo su S3
+                        $storage->put($finalPath, $fileContents);
+
+                        // CREAZIONE DB
                         $payslip = DgPayslip::create([
-                            'user_id'      => $data['user_id'],
-                            'file_name'    => $filename,
-                            'file_path'    => $storedPath,
-                            'storage_disk' => $disk,
-                            'period_year'  => $data['period_year'],
-                            'period_month' => $data['period_month'],
-                            'status'       => 'matched',
-                            'uploaded_by'  => auth()->id(),
-                            'uploaded_at'  => now(),
-                            'mime_type'    => $mimeType ?? null,
-                            'file_size'    => $fileSize ?? null,
-                            'checksum'     => $checksum ?? null,
+                            'user_id'       => $data['user_id'],
+                            'file_name'     => $filename,
+                            'file_path'     => $finalPath,
+                            'storage_disk'  => $disk,
+                            'period_year'   => $data['period_year'],
+                            'period_month'  => $data['period_month'],
+                            'status'        => 'matched',
+                            'uploaded_by'   => auth()->id(),
+                            'uploaded_at'   => now(),
                         ]);
 
+                        // Log attività
                         activity('Buste paga')
                             ->causedBy(auth()->user())
                             ->performedOn($payslip)
@@ -191,34 +191,39 @@ class DgPayslipResource extends Resource
                     ->icon('heroicon-o-arrow-up-tray')
                     ->modalHeading('Importa ZIP di buste paga')
                     ->form([
-                        Forms\Components\FileUpload::make('zip')
-                            ->label('Zip con PDF')
-                            ->acceptedFileTypes(['application/zip'])
-                            ->directory('payslips/import/tmp')
-                            ->required(),
+                       Forms\Components\FileUpload::make('zip')
+                        ->label('Zip con PDF')
+                        ->acceptedFileTypes(['application/zip'])
+                        ->disk('local')                     // ⬅️ upload sempre in locale
+                        ->directory('tmp/payslips/import')  // ⬅️ cartella temporanea locale
+                        ->preserveFilenames()
+                        ->required(),
                     ])
-                    ->action(function (array $data) {
-                        $zipPath = $data['zip'];
-                        $disk = config('filesystems.default');
-                        $diskConfig = config("filesystems.disks.{$disk}", []);
-                        $filesystem = Storage::disk($disk);
-                        $isLocalDisk = ($diskConfig['driver'] ?? null) === 'local';
+                   ->action(function (array $data) {
+                        // Disco finale (S3 in produzione)
+                        $disk     = config('filesystems.default');
+                        $storage  = Storage::disk($disk);
 
+                        // File ZIP caricato da Filament (locale)
+                        $zipFile  = $data['zip'];
+
+                        // Base temporanea locale per lavorare sugli ZIP
                         $tempBase = storage_path('app/tmp/payslips');
                         File::ensureDirectoryExists($tempBase);
 
-                        // porto lo ZIP in locale
-                        if ($isLocalDisk) {
-                            $localZip = $filesystem->path($zipPath);
-                            if (!is_file($localZip)) {
-                                throw new \Exception('File ZIP non trovato su disco locale.');
-                            }
+                        // Ricaviamo il path locale effettivo dello ZIP
+                        if ($zipFile instanceof \Livewire\Features\SupportFileUploads\TemporaryUploadedFile) {
+                            $localZip = $zipFile->getRealPath();
                         } else {
-                            $localZip = tempnam($tempBase, 'zip_');
-                            File::put($localZip, $filesystem->get($zipPath));
+                            // $zipFile è una stringa tipo "tmp/payslips/import/xxx.zip" sul disco "local"
+                            $localZip = Storage::disk('local')->path($zipFile);
                         }
 
-                        $zip = new ZipArchive;
+                        if (! is_file($localZip)) {
+                            throw new \Exception('File ZIP non trovato su disco locale.');
+                        }
+
+                        $zip = new \ZipArchive;
 
                         if ($zip->open($localZip) !== true) {
                             throw new \Exception('File ZIP non leggibile.');
@@ -240,7 +245,7 @@ class DgPayslipResource extends Resource
                             $filename = $pdf;
                             $fullPath = $extractTo . '/' . $pdf;
 
-                            if (!is_file($fullPath)) {
+                            if (! is_file($fullPath)) {
                                 continue;
                             }
 
@@ -249,11 +254,11 @@ class DgPayslipResource extends Resource
                             // 🔍 parsing da nome file (matricola, mese, anno)
                             $parsed = self::parsePayslipFilename($filename);
 
+                            // se non riesco ad estrarre dati minimi → errore
                             if (! $parsed['matricola'] || ! $parsed['mese'] || ! $parsed['anno']) {
-                                // non riesco a capire a chi/mese/anno appartiene → errore
                                 $errorPath = "payslips/import/error/$filename";
 
-                                $filesystem->put($errorPath, $content);
+                                $storage->put($errorPath, $content);
 
                                 DgPayslip::create([
                                     'file_name'    => $filename,
@@ -272,7 +277,7 @@ class DgPayslipResource extends Resource
                                 // nessun dipendente con quella matricola → errore
                                 $errorPath = "payslips/import/error/$filename";
 
-                                $filesystem->put($errorPath, $content);
+                                $storage->put($errorPath, $content);
 
                                 DgPayslip::create([
                                     'file_name'    => $filename,
@@ -288,6 +293,7 @@ class DgPayslipResource extends Resource
                             $year  = $parsed['anno'];
                             $month = $parsed['mese'];
 
+                            // Percorso definitivo sul disco finale (S3)
                             $directory = sprintf(
                                 'payslips/%d/%s',
                                 $matchedUser->id,
@@ -296,13 +302,16 @@ class DgPayslipResource extends Resource
 
                             $dest = $directory . '/' . $filename;
 
-                            $filesystem->makeDirectory($directory);
-                            $filesystem->put($dest, $content);
+                            // Scriviamo il PDF sul disco finale (es. S3)
+                            $storage->makeDirectory($directory);
+                            $storage->put($dest, $content);
 
-                            $mimeType = $filesystem->mimeType($dest);
-                            $fileSize = $filesystem->size($dest);
-                            $checksum = sha1($filesystem->get($dest));
+                            // Metadati dal disco finale
+                            $mimeType = $storage->mimeType($dest);
+                            $fileSize = $storage->size($dest);
+                            $checksum = sha1($storage->get($dest));
 
+                            // Creazione record busta paga
                             $payslip = DgPayslip::create([
                                 'user_id'      => $matchedUser->id,
                                 'file_name'    => $filename,
@@ -332,11 +341,13 @@ class DgPayslipResource extends Resource
                             @unlink($fullPath);
                         }
 
-                        if (! $isLocalDisk && isset($localZip) && is_file($localZip)) {
+                        // pulizia: cartella di estrazione
+                        File::deleteDirectory($extractTo);
+
+                        // opzionale: rimuovere lo ZIP locale
+                        if (is_file($localZip)) {
                             @unlink($localZip);
                         }
-
-                        File::deleteDirectory($extractTo);
 
                         Notification::make()
                             ->title('Importazione completata')
