@@ -1,6 +1,7 @@
 <script setup>
 import { computed, onMounted } from 'vue'
 import { useSessionStore } from '../../../stores/session'
+import PunchButton from '../components/PunchButton.vue'
 
 const sessionStore = useSessionStore()
 
@@ -35,12 +36,7 @@ const sessionStatus = computed(() =>
         <p class="text-lg font-semibold text-slate-900">{{ sessionStatus }}</p>
       </div>
 
-      <button
-        type="button"
-        class="w-full rounded-lg bg-blue-600 p-3 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-200"
-      >
-        Timbratura (disponibile nel prossimo step)
-      </button>
+      <PunchButton />
     </div>
   </section>
 </template>
