@@ -1,16 +1,19 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import { useSessionStore } from '../../../stores/session'
-import { getCurrentPosition } from '../../../utils/geo'
+import { getStablePosition } from '../../../utils/geo'
+import { showError, showSuccess, showWarning } from '../../../utils/toast'
 
 const sessionStore = useSessionStore()
 
-const loading = ref(false)
+const loadingStage = ref('')
 const errorMessage = ref('')
 const warningMessages = ref([])
 
 const buttonLabel = computed(() => (sessionStore.activeSession ? 'ESCI' : 'ENTRA'))
 const punchType = computed(() => (sessionStore.activeSession ? 'out' : 'in'))
+const loading = computed(() => loadingStage.value !== '')
+const buttonText = computed(() => (loading.value ? loadingStage.value : buttonLabel.value))
 
 function translateWarning(code) {
   if (code === 'outside_site') {
@@ -23,27 +26,49 @@ function translateWarning(code) {
 async function handlePunch() {
   errorMessage.value = ''
   warningMessages.value = []
-  loading.value = true
+  loadingStage.value = 'Attivazione GPS...'
 
   try {
-    const coords = await getCurrentPosition()
+    await nextTick()
+    loadingStage.value = 'Localizzazione in corso...'
+    const coords = await getStablePosition()
+
+    if (coords.accuracy > 100) {
+      showWarning('Segnale GPS debole, prova a spostarti vicino all’ingresso.')
+    }
+
+    loadingStage.value = 'Registrazione timbratura...'
     const result = await sessionStore.punch(punchType.value, coords)
 
-    if (!result.success) {
-      errorMessage.value = 'Errore durante la timbratura.'
+    if (!result?.success) {
+      const message = 'Errore durante la timbratura.'
+      errorMessage.value = message
+      showError(message)
       return
     }
 
     warningMessages.value = (result.warnings || []).map(translateWarning)
     await sessionStore.loadCurrent()
+
+    const successMessage = punchType.value === 'in' ? 'Timbratura registrata' : 'Uscita registrata'
+    showSuccess(successMessage)
   } catch (error) {
-    if (error?.code === 1) {
-      errorMessage.value = 'Permesso di geolocalizzazione negato.'
+    if (error?.message === 'NO_POSITION') {
+      errorMessage.value = 'Impossibile ottenere una posizione valida.'
+      showError(errorMessage.value)
+    } else if (error?.code === 1) {
+      const isIOS = /iPad|iPhone|iPod/i.test(navigator.userAgent)
+      const message = isIOS
+        ? 'Vai su Impostazioni > Privacy > Localizzazione e abilita la posizione.'
+        : 'Vai su Impostazioni > App > Autorizzazioni > Posizione.'
+      errorMessage.value = message
+      showError(message)
     } else {
       errorMessage.value = 'Impossibile ottenere la posizione.'
+      showError(errorMessage.value)
     }
   } finally {
-    loading.value = false
+    loadingStage.value = ''
   }
 }
 </script>
@@ -56,8 +81,7 @@ async function handlePunch() {
       :disabled="loading"
       @click="handlePunch"
     >
-      <span v-if="loading">Attendere...</span>
-      <span v-else>{{ buttonLabel }}</span>
+      <span>{{ buttonText }}</span>
     </button>
 
     <div v-if="errorMessage" class="rounded-lg border border-red-100 bg-red-50 p-3 text-sm text-red-700">
