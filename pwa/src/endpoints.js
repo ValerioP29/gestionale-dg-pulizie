@@ -1,3 +1,4 @@
+// Imposta VITE_API_BASE_URL nell'ambiente (es. https://app.dgpulizie.it in produzione)
 export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
 export const ENDPOINTS = {
@@ -9,3 +10,4 @@ export const ENDPOINTS = {
   payrollList: '/api/mobile/payroll',
   payrollDownload: (id) => `/api/mobile/payroll/${id}/download`,
 };
+
