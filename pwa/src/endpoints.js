@@ -1,6 +1,9 @@
-export const API_BASE_URL = "http://localhost:8000"
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
 export const ENDPOINTS = {
-  login: "/api/login",
-  current: "/api/mobile/work-sessions/current",
-}
+  login: '/api/login',
+  logout: '/api/logout',
+  me: '/api/me',
+  current: '/api/mobile/work-sessions/current',
+  punch: '/api/mobile/work-sessions/punch',
+};

@@ -13,18 +13,20 @@ export const useSessionStore = defineStore('session', {
         const response = await apiGet(ENDPOINTS.current)
 
         if (!response.ok) {
-          this.assignedSite = null
-          this.activeSession = null
-          return
+          this.assignedSite = null;
+          this.activeSession = null;
+          return;
         }
 
-        const data = await response.json()
-        this.assignedSite = data?.assigned_site ?? null
-        this.activeSession = data?.session ?? null
+        const json = await response.json();
+        const payload = json.data;
+        this.assignedSite = payload?.assigned_site ?? null;
+        this.activeSession = payload?.session ?? null;
+
       } catch (error) {
-        console.error('Errore nel caricamento della sessione corrente:', error)
-        this.assignedSite = null
-        this.activeSession = null
+        console.error('Errore nel caricamento della sessione corrente:', error);
+        this.assignedSite = null;
+        this.activeSession = null;
       }
     },
   },

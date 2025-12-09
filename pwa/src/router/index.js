@@ -15,17 +15,17 @@ const router = createRouter({
 })
 
 router.beforeEach((to, from, next) => {
-  const token = getToken()
+  const token = getToken();
 
   if (to.path === '/login' && token) {
-    return next('/home')
+    return next('/home');
   }
 
   if (to.meta.requiresAuth !== false && !token && to.path !== '/login') {
-    return next('/login')
+    return next('/login');
   }
 
-  return next()
+  return next();
 })
 
-export default router
+export default router;
