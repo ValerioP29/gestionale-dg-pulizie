@@ -20,10 +20,7 @@ const sessionStatus = computed(() =>
 
 <template>
   <section class="space-y-6">
-    <header class="space-y-2">
-      <h1 class="text-2xl font-bold text-slate-900">Home</h1>
-      <p class="text-slate-600">Benvenuto nella PWA di DG Pulizie.</p>
-    </header>
+    <p class="text-sm text-slate-600">Benvenuto nella PWA di DG Pulizie.</p>
 
     <div class="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <div>
