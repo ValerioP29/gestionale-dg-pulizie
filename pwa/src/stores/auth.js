@@ -10,6 +10,18 @@ export const useAuthStore = defineStore('auth', {
     user: null,
   }),
   actions: {
+    applyAuthPayload(payload) {
+      if (!payload?.token) {
+        throw new Error('Token non presente nella risposta')
+      }
+
+      const userPayload = payload?.user?.data ?? payload?.user ?? null
+
+      this.setToken(payload.token)
+      this.setUser(userPayload)
+
+      return true
+    },
     setToken(token) {
       this.token = token
       persistToken(token)
@@ -28,24 +40,35 @@ export const useAuthStore = defineStore('auth', {
       try {
         const response = await apiPost(ENDPOINTS.login, { email, password })
 
+        const data = await response.json()
+
         if (!response.ok) {
           return false
         }
 
-        const data = await response.json()
-
-        if (!data?.token) {
-          return false
-        }
-
-        this.setToken(data.token)
-        this.setUser(data.user ?? null)
-
-        return true
+        return this.applyAuthPayload(data)
       } catch (error) {
         console.error('Errore di login:', error)
         return false
       }
+    },
+    async registerEmployee(payload) {
+      try {
+        const response = await apiPost(ENDPOINTS.registerEmployee, payload)
+        const data = await response.json()
+
+        if (!response.ok) {
+          throw new Error(data?.message || 'Registrazione non riuscita')
+        }
+
+        return this.applyAuthPayload(data)
+      } catch (error) {
+        console.error('Errore durante la registrazione:', error)
+        throw error
+      }
+    },
+    loginFromRegistration(token, user) {
+      return this.applyAuthPayload({ token, user })
     },
     async fetchUser() {
       if (!this.token) {

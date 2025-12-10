@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { getToken } from '../utils/storage'
 import Login from '../modules/auth/views/Login.vue'
+import Register from '../views/Register.vue'
 import Home from '../modules/punch/views/Home.vue'
 import Profile from '../modules/profile/views/Profile.vue'
 import Payroll from '../modules/payroll/views/Payroll.vue'
@@ -11,6 +12,7 @@ const DEFAULT_TITLE = 'DG Pulizie'
 const routes = [
   { path: '/', redirect: '/login' },
   { path: '/login', name: 'login', component: Login, meta: { requiresAuth: false, title: 'Login' } },
+  { path: '/register', name: 'register', component: Register, meta: { requiresAuth: false, title: 'Registrazione' } },
   {
     path: '/',
     component: MainLayout,
@@ -31,12 +33,13 @@ const router = createRouter({
 
 router.beforeEach((to, from, next) => {
   const token = getToken()
+  const isPublicAuthRoute = to.path === '/login' || to.path === '/register'
 
-  if (to.path === '/login' && token) {
+  if (isPublicAuthRoute && token) {
     return next('/home')
   }
 
-  if (to.meta.requiresAuth !== false && !token && to.path !== '/login') {
+  if (to.meta.requiresAuth !== false && !token && !isPublicAuthRoute) {
     return next('/login')
   }
 
