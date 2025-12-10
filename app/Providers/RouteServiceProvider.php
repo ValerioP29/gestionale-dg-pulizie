@@ -6,6 +6,7 @@ use Illuminate\Foundation\Support\Providers\RouteServiceProvider as ServiceProvi
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\Route;
 
 class RouteServiceProvider extends ServiceProvider
 {
@@ -14,17 +15,25 @@ class RouteServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        // Limite dedicato per login: 10 tentativi/min per coppia IP+email
+        // Rate limits
         RateLimiter::for('login', function (Request $request) {
             $key = sprintf('%s|%s', $request->ip(), (string) $request->input('email'));
             return Limit::perMinute(10)->by($key);
         });
 
-        // Limite per download buste paga: 20/min per utente o IP
         RateLimiter::for('payslip-downloads', function (Request $request) {
             $identifier = $request->user()?->id ?? $request->ip();
-
             return Limit::perMinute(20)->by($identifier);
+        });
+
+        // QUI REGISTRIAMO LE ROUTE
+        $this->routes(function () {
+            Route::middleware('api')
+                ->prefix('api')
+                ->group(base_path('routes/api.php'));
+
+            Route::middleware('web')
+                ->group(base_path('routes/web.php'));
         });
     }
 }

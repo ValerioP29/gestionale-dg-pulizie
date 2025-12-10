@@ -5,8 +5,9 @@ namespace App\Http\Controllers\Api;
 use App\Http\Resources\AuthenticatedUserResource;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
+use App\Models\User;
 
 class AuthController
 {
@@ -17,11 +18,9 @@ class AuthController
             'password' => ['required'],
         ]);
 
-        $guard = Auth::guard('web');
+        $user = User::where('email', $credentials['email'])->first();
 
-        if (! $guard->attempt($credentials, $request->boolean('remember'))) {
-            Log::info('API login failed', ['email' => $credentials['email']]);
-
+        if (! $user || ! Hash::check($credentials['password'], $user->password)) {
             throw ValidationException::withMessages([
                 'email' => __('auth.failed'),
             ]);
@@ -62,7 +61,7 @@ class AuthController
 
         Log::info('API logout', ['user_id' => optional($user)->id]);
 
-        return response()->noContent();
+        return response()->json(['message' => 'Logged out']);
     }
 
     public function me(Request $request)
