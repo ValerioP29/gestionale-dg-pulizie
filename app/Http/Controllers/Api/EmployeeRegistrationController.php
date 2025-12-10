@@ -6,7 +6,7 @@ use App\Http\Resources\AuthenticatedUserResource;
 use App\Models\DgUserConsent;
 use App\Models\User;
 use Illuminate\Http\Request;
-use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
@@ -22,6 +22,7 @@ class EmployeeRegistrationController
             'matricola' => ['nullable', 'string', 'max:64'],
             'privacy_accepted' => ['required', 'accepted'],
             'location_consent' => ['nullable', 'boolean'],
+            'password' => ['required', 'string', 'min:8', 'confirmed'],
         ]);
 
         if (!$data['privacy_accepted']) {
@@ -30,15 +31,14 @@ class EmployeeRegistrationController
             ]);
         }
 
-        $password = Str::random(16);
-
         $user = User::create([
             'first_name' => $data['first_name'],
             'last_name' => $data['last_name'],
+            'name' => trim($data['first_name'].' '.$data['last_name']),
             'email' => $data['email'],
             'cf' => strtoupper($data['codice_fiscale']),
             'payroll_code' => $data['matricola'] ?? null,
-            'password' => $password,
+            'password' => Hash::make($data['password']),
             'role' => 'employee',
             'can_login' => true,
             'active' => true,
