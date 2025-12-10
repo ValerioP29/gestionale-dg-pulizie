@@ -3,6 +3,7 @@ import { computed, onMounted } from 'vue'
 import { useSessionStore } from '../../../stores/session'
 import { useConnectivityStore } from '../../../stores/connectivity'
 import PunchButton from '../components/PunchButton.vue'
+import PwaInstallBanner from '../../../components/PwaInstallBanner.vue'
 
 const sessionStore = useSessionStore()
 const connectivityStore = useConnectivityStore()
@@ -62,6 +63,8 @@ const connectivityPillClasses = computed(() =>
 
 <template>
   <section class="space-y-6">
+    <PwaInstallBanner />
+
     <p class="text-sm text-slate-600">Benvenuto nella PWA di DG Pulizie.</p>
 
     <div class="flex items-center gap-2 text-xs font-semibold text-slate-700">

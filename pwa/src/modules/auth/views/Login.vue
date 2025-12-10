@@ -69,6 +69,11 @@ async function onSubmit() {
       >
         {{ isSubmitting ? 'Accesso in corso...' : 'Accedi' }}
       </button>
+
+      <p class="text-center text-sm text-slate-600">
+        Non hai un account?
+        <RouterLink to="/register" class="font-semibold text-blue-600 hover:underline">Registrati</RouterLink>
+      </p>
     </form>
   </section>
 </template>

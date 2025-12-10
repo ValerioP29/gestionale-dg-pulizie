@@ -1,25 +1,37 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useAuthStore } from '../../../stores/auth'
-import { apiGet } from '../../../http'
-import { ENDPOINTS } from '../../../endpoints'
 
 const authStore = useAuthStore()
 const loading = ref(true)
-const profile = ref(null)
 const error = ref('')
 
+const profile = computed(() => authStore.user)
+
+const fullName = computed(() => {
+  const first = profile.value?.first_name
+  const last = profile.value?.last_name
+
+  if (first || last) {
+    return [first, last].filter(Boolean).join(' ')
+  }
+
+  return 'Nessun dato disponibile'
+})
+
+const email = computed(() => profile.value?.email || 'Nessun dato disponibile')
+const codiceFiscale = computed(() => profile.value?.cf || 'Nessun dato disponibile')
+const mainSiteName = computed(() => profile.value?.main_site_name || 'Non assegnato')
+const mainSiteAddress = computed(() => profile.value?.main_site_address || 'Non assegnato')
+
 onMounted(async () => {
+  if (profile.value) {
+    loading.value = false
+    return
+  }
+
   try {
-    const response = await apiGet(ENDPOINTS.me)
-
-    if (!response.ok) {
-      throw new Error('Impossibile caricare il profilo utente')
-    }
-
-    const json = await response.json()
-    profile.value = json.data
-
+    await authStore.fetchUser()
   } catch (err) {
     error.value = err.message || 'Errore sconosciuto'
   } finally {
@@ -45,20 +57,24 @@ const handleLogout = async () => {
 
       <dl v-else class="space-y-3 text-sm text-slate-700">
         <div class="grid grid-cols-3 gap-2">
-          <dt class="font-semibold text-slate-900">Nome</dt>
-          <dd class="col-span-2">{{ profile?.first_name || '-' }}</dd>
-        </div>
-        <div class="grid grid-cols-3 gap-2">
-          <dt class="font-semibold text-slate-900">Cognome</dt>
-          <dd class="col-span-2">{{ profile?.last_name || '-' }}</dd>
+          <dt class="font-semibold text-slate-900">Nome completo</dt>
+          <dd class="col-span-2">{{ fullName }}</dd>
         </div>
         <div class="grid grid-cols-3 gap-2">
           <dt class="font-semibold text-slate-900">Email</dt>
-          <dd class="col-span-2">{{ profile?.email || '-' }}</dd>
+          <dd class="col-span-2">{{ email }}</dd>
+        </div>
+        <div class="grid grid-cols-3 gap-2">
+          <dt class="font-semibold text-slate-900">Codice fiscale</dt>
+          <dd class="col-span-2">{{ codiceFiscale }}</dd>
         </div>
         <div class="grid grid-cols-3 gap-2">
           <dt class="font-semibold text-slate-900">Cantiere principale</dt>
-          <dd class="col-span-2">{{ profile?.main_site_name || '-' }}</dd>
+          <dd class="col-span-2">{{ mainSiteName }}</dd>
+        </div>
+        <div class="grid grid-cols-3 gap-2">
+          <dt class="font-semibold text-slate-900">Indirizzo cantiere</dt>
+          <dd class="col-span-2">{{ mainSiteAddress }}</dd>
         </div>
       </dl>
     </div>
