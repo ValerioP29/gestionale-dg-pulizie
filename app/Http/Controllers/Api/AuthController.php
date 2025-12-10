@@ -5,9 +5,8 @@ namespace App\Http\Controllers\Api;
 use App\Http\Resources\AuthenticatedUserResource;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
-use App\Models\User;
 
 class AuthController
 {
@@ -18,22 +17,18 @@ class AuthController
             'password' => ['required'],
         ]);
 
-        $user = User::where('email', $credentials['email'])->first();
-
-        if (! $user || ! Hash::check($credentials['password'], $user->password)) {
+        if (! Auth::guard('web')->attempt($credentials)) {
             throw ValidationException::withMessages([
                 'email' => __('auth.failed'),
             ]);
         }
 
-        $user = $guard->user();
+        $request->session()->regenerate();
+
+        $user = Auth::guard('web')->user();
 
         $user->loadMissing('mainSite');
 
-        // Regenerate session for web guard compatibility, even though the PWA relies on bearer tokens.
-        $request->session()->regenerate();
-
-        // Invalidate previous tokens to avoid multiple active sessions per user.
         $user->tokens()->delete();
 
         $token = $user->createToken('api')->plainTextToken;
@@ -42,7 +37,7 @@ class AuthController
 
         return response()->json([
             'token' => $token,
-            'user' => AuthenticatedUserResource::make($user)->resolve(),
+            'user' => AuthenticatedUserResource::make($user),
         ]);
     }
 
@@ -50,12 +45,12 @@ class AuthController
     {
         $user = $request->user();
 
-        // Revoke the current bearer token when present (PWA flow).
         if ($user && $user->currentAccessToken()) {
             $user->currentAccessToken()->delete();
         }
 
         Auth::guard('web')->logout();
+
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 
@@ -68,7 +63,9 @@ class AuthController
     {
         $user = $request->user();
 
-        $user?->loadMissing('mainSite');
+        if ($user) {
+            $user->loadMissing('mainSite');
+        }
 
         Log::info('API me requested', ['user_id' => optional($user)->id]);
 
