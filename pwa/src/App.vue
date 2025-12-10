@@ -2,9 +2,11 @@
 import { computed, onMounted } from 'vue'
 import { useRoute, RouterView } from 'vue-router'
 import { useConnectivityStore } from './stores/connectivity'
+import { usePwaInstallStore } from './stores/pwaInstall'
 
 const route = useRoute()
 const connectivityStore = useConnectivityStore()
+const pwaInstallStore = usePwaInstallStore()
 
 const wrapperClasses = computed(() =>
   route.name === 'login' ? 'mx-auto max-w-md p-6' : ''
@@ -12,6 +14,7 @@ const wrapperClasses = computed(() =>
 
 onMounted(() => {
   connectivityStore.startTracking()
+  pwaInstallStore.initialize()
 })
 </script>
 
