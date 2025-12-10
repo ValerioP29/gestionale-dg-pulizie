@@ -29,6 +29,8 @@ class AuthController
 
         $user = $guard->user();
 
+        $user->loadMissing('mainSite');
+
         // Regenerate session for web guard compatibility, even though the PWA relies on bearer tokens.
         $request->session()->regenerate();
 
@@ -66,6 +68,8 @@ class AuthController
     public function me(Request $request)
     {
         $user = $request->user();
+
+        $user?->loadMissing('mainSite');
 
         Log::info('API me requested', ['user_id' => optional($user)->id]);
 
