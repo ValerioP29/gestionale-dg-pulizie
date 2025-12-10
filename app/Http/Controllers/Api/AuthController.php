@@ -27,16 +27,32 @@ class AuthController
             ]);
         }
 
+        $user = $guard->user();
+
+        // Regenerate session for web guard compatibility, even though the PWA relies on bearer tokens.
         $request->session()->regenerate();
 
-        Log::info('API login successful', ['user_id' => $guard->id()]);
+        // Invalidate previous tokens to avoid multiple active sessions per user.
+        $user->tokens()->delete();
 
-        return AuthenticatedUserResource::make($request->user());
+        $token = $user->createToken('api')->plainTextToken;
+
+        Log::info('API login successful', ['user_id' => $user->id]);
+
+        return response()->json([
+            'token' => $token,
+            'user' => AuthenticatedUserResource::make($user)->resolve(),
+        ]);
     }
 
     public function logout(Request $request)
     {
         $user = $request->user();
+
+        // Revoke the current bearer token when present (PWA flow).
+        if ($user && $user->currentAccessToken()) {
+            $user->currentAccessToken()->delete();
+        }
 
         Auth::guard('web')->logout();
         $request->session()->invalidate();
