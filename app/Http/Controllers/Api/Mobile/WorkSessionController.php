@@ -59,7 +59,19 @@ class WorkSessionController
         $distance = null;
         $outside = false;
 
-        if ($site && $hasDeviceCoords) {
+        if (!$site && $session) {
+            $site = $session->site;
+        }
+
+        if (!$site) {
+            return response()->json([
+                'status'  => 'error',
+                'code'    => 'site_missing',
+                'message' => 'Nessun cantiere assegnato',
+            ], 422);
+        }
+
+        if ($hasDeviceCoords) {
             $earthRadius = 6371000; // meters
 
             $latFrom = deg2rad($data['device_latitude']);
@@ -70,13 +82,21 @@ class WorkSessionController
             $latDelta = $latTo - $latFrom;
             $lonDelta = $lonTo - $lonFrom;
 
-            $angle = 2 * asin(sqrt(pow(sin($latDelta / 2), 2) + cos($latFrom) * cos($latTo) * pow(sin($lonDelta / 2), 2)));
+            $angle = 2 * asin(sqrt(pow(sin($latDelta / 2), 2) + cos($latFrom) * cos($latTo) * pow(sin($lonDelta / 2), 2))));
             $distance = $earthRadius * $angle;
             $outside = $distance > $site->radius_m;
-        }
 
-        if (!$site) {
-            $outside = false;
+            if ($outside) {
+                return response()->json([
+                    'status'  => 'error',
+                    'code'    => 'outside_site',
+                    'message' => 'Sei fuori cantiere, impossibile registrare la timbratura.',
+                    'data'    => [
+                        'distance_m' => $distance,
+                        'radius_m'   => $site->radius_m,
+                    ],
+                ], 422);
+            }
         }
 
         if ($data['type'] === 'in') {
@@ -126,17 +146,12 @@ class WorkSessionController
             'radius_m'   => $site->radius_m,
         ] : null;
 
-        $warnings = [];
-        if ($session->outside_site) {
-            $warnings[] = 'outside_site';
-        }
-
         return response()->json([
             'status' => 'ok',
             'data'   => [
                 'assigned_site' => $assignedSiteData,
                 'session'       => $session,
-                'warnings'      => $warnings,
+                'warnings'      => [],
             ],
         ]);
     }

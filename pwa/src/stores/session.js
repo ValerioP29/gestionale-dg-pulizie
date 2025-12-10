@@ -44,33 +44,45 @@ export const useSessionStore = defineStore('session', {
 
       if (typeof navigator !== 'undefined' && navigator.onLine === false) {
         this.queuePunch(payload)
-        return { success: true, queued: true }
+        return { success: false, queued: true }
       }
 
       try {
         const response = await apiPost(ENDPOINTS.punch, payload)
+        let json = null
 
-        if (!response.ok) {
-          return { success: false, warnings: [] }
+        try {
+          json = await response.clone().json()
+        } catch (parseError) {
+          console.error('Impossibile leggere la risposta di timbratura:', parseError)
         }
 
-        const json = await response.json()
-        const data = json.data
+        if (!response.ok) {
+          return {
+            success: false,
+            queued: false,
+            warnings: [],
+            message: json?.message || 'Errore durante la timbratura.',
+            code: json?.code,
+          }
+        }
+
+        const data = json?.data
 
         this.assignedSite = data?.assigned_site ?? null
         this.activeSession = data?.session ?? null
 
-        return { success: true, warnings: data?.warnings ?? [] }
+        return { success: true, queued: false, warnings: data?.warnings ?? [] }
       } catch (error) {
         console.error('Errore durante la timbratura:', error)
         this.queuePunch(payload)
-        return { success: true, queued: true }
+        return { success: false, queued: true }
       }
     },
 
     queuePunch(payload) {
       addPunchToQueue({ ...payload, queued_at: new Date().toISOString() })
-      showWarning('Sei offline: timbratura salvata e verrà sincronizzata appena torni online.')
+      showWarning('Connessione debole, timbratura in coda.')
     },
 
     async flushOfflinePunches() {

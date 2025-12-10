@@ -37,25 +37,28 @@ async function handlePunch() {
       showWarning('Segnale GPS debole, prova a spostarti vicino all’ingresso.')
     }
 
+    const intendedPunch = punchType.value
+
     loadingStage.value = 'Registrazione timbratura...'
-    const result = await sessionStore.punch(punchType.value, coords)
+    const result = await sessionStore.punch(intendedPunch, coords)
 
     if (!result?.success) {
-      const message = 'Errore durante la timbratura.'
+      if (result?.queued) {
+        warningMessages.value = []
+        errorMessage.value = ''
+        return
+      }
+
+      const message = result?.message || 'Errore durante la timbratura.'
       errorMessage.value = message
       showError(message)
-      return
-    }
-
-    if (result.queued) {
-      warningMessages.value = []
       return
     }
 
     warningMessages.value = (result.warnings || []).map(translateWarning)
     await sessionStore.loadCurrent()
 
-    const successMessage = punchType.value === 'in' ? 'Timbratura registrata' : 'Uscita registrata'
+    const successMessage = intendedPunch === 'in' ? 'Entrata registrata' : 'Uscita registrata'
     showSuccess(successMessage)
   } catch (error) {
     if (error?.message === 'NO_POSITION') {
