@@ -82,9 +82,12 @@ class WorkSessionController
             $latDelta = $latTo - $latFrom;
             $lonDelta = $lonTo - $lonFrom;
 
-            $angle = 2 * asin(sqrt(pow(sin($latDelta / 2), 2) + cos($latFrom) * cos($latTo) * pow(sin($lonDelta / 2), 2))));
-            $distance = $earthRadius * $angle;
-            $outside = $distance > $site->radius_m;
+            $angle = 2 * asin(
+                sqrt(
+                    pow(sin($latDelta / 2), 2)
+                    + cos($latFrom) * cos($latTo) * pow(sin($lonDelta / 2), 2)
+                )
+            );
 
             if ($outside) {
                 return response()->json([
