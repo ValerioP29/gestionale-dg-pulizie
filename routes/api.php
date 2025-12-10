@@ -1,9 +1,13 @@
 <?php
 
 use App\Http\Controllers\Api\AuthController;
+use App\Http\Controllers\Api\EmployeeRegistrationController;
 use App\Http\Controllers\Api\Mobile\PayrollController;
 use App\Http\Controllers\Api\Mobile\WorkSessionController;
 use Illuminate\Support\Facades\Route;
+
+Route::post('/register/employee', EmployeeRegistrationController::class)
+    ->middleware(['guest', 'throttle:5,1']);
 
 Route::post('/login', [AuthController::class, 'login'])
     ->middleware(['guest', 'throttle:5,1']);
