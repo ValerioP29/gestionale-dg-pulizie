@@ -29,7 +29,7 @@ class DgPunchPolicy
 
     public function create(User $user): bool
     {
-        return $user->isRole('admin');
+        return $user->hasAnyRole(['admin', 'supervisor']);
     }
 
     public function update(User $user, DgPunch $punch): bool
