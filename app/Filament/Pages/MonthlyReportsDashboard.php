@@ -38,6 +38,7 @@ class MonthlyReportsDashboard extends Page implements HasForms, HasTable
         'worked_hours' => 0.0,
         'absences' => 0,
         'overtime_hours' => 0.0,
+        'overtime_minutes' => 0,
     ];
 
     public bool $hasData = false;
@@ -63,10 +64,6 @@ class MonthlyReportsDashboard extends Page implements HasForms, HasTable
     protected function getHeaderActions(): array
     {
         return [
-            Actions\Action::make('downloadExcelSheet')
-                ->label('Foglio ore Excel')
-                ->icon('heroicon-o-document-arrow-down')
-                ->url(fn () => $this->excelUrl(), shouldOpenInNewTab: true),
             Actions\Action::make('refreshCurrentMonth')
                 ->label('Rigenera report mese attuale')
                 ->icon('heroicon-o-arrow-path')
@@ -207,17 +204,39 @@ class MonthlyReportsDashboard extends Page implements HasForms, HasTable
     {
         return [
             Forms\Components\Select::make('period')
-                ->label('Mese')
+                ->label('Periodo')
                 ->options($this->getAvailablePeriods())
                 ->searchable()
+                ->placeholder('Seleziona mese')
                 ->reactive()
-                ->afterStateUpdated(function (?string $state) {
-                    if ($state) {
-                        $this->period = $state;
-                        $this->refreshMetrics();
-                    }
-                })
-                ->required(),
+            ->afterStateUpdated(function (?string $state) {
+                if ($state) {
+                    $this->period = $state;
+                    $this->refreshMetrics();
+                }
+            })
+            ->required(),
+        ];
+    }
+
+    protected function getTableHeaderActions(): array
+    {
+        return [
+            Tables\Actions\Action::make('downloadCsv')
+                ->label('Scarica Excel')
+                ->icon('heroicon-o-arrow-down-tray')
+                ->action(function () {
+                    [$start] = $this->currentPeriodRange();
+
+                    return Excel::download(
+                        new MonthlyHoursExport($start->year, $start->month),
+                        sprintf(
+                            'report_%s_%d.xlsx',
+                            Str::slug($start->translatedFormat('F'), '_'),
+                            $start->year,
+                        ),
+                    );
+                }),
         ];
     }
 
@@ -253,9 +272,9 @@ class MonthlyReportsDashboard extends Page implements HasForms, HasTable
                 ->label('Assenze')
                 ->sortable(),
             Tables\Columns\TextColumn::make('overtime_minutes')
-                ->label('Straordinari (h)')
+                ->label('Straordinari')
                 ->sortable()
-                ->formatStateUsing(fn ($state) => number_format(((int) $state) / 60, 2, ',', '.')),
+                ->formatStateUsing(fn ($state) => \App\Models\DgWorkSession::formatMinutesHuman((int) $state)),
         ];
     }
 
@@ -297,6 +316,7 @@ class MonthlyReportsDashboard extends Page implements HasForms, HasTable
                 'worked_hours' => 0.0,
                 'absences' => 0,
                 'overtime_hours' => 0.0,
+                'overtime_minutes' => 0,
             ];
 
             return;
@@ -314,6 +334,7 @@ class MonthlyReportsDashboard extends Page implements HasForms, HasTable
             'worked_hours' => round($workedHours, 2),
             'absences' => $absences,
             'overtime_hours' => round($overtimeMinutes / 60, 2),
+            'overtime_minutes' => $overtimeMinutes,
         ];
     }
 
@@ -341,8 +362,18 @@ class MonthlyReportsDashboard extends Page implements HasForms, HasTable
     protected function buildMonthlyQuery(CarbonImmutable $start, CarbonImmutable $end): Builder
     {
         return DgReportCache::query()
+            ->selectRaw('MIN(id) as id')
+            ->selectRaw('user_id')
+            ->selectRaw('COALESCE(resolved_site_id, site_id) as effective_site_id')
+            ->selectRaw('COALESCE(resolved_site_id, site_id) as resolved_site_id')
+            ->selectRaw('COALESCE(resolved_site_id, site_id) as site_id')
+            ->selectRaw('SUM(worked_hours) as worked_hours')
+            ->selectRaw('SUM(days_present) as days_present')
+            ->selectRaw('SUM(days_absent) as days_absent')
+            ->selectRaw('SUM(overtime_minutes) as overtime_minutes')
             ->whereDate('period_start', $start->toDateString())
-            ->whereDate('period_end', $end->toDateString());
+            ->whereDate('period_end', $end->toDateString())
+            ->groupByRaw('user_id, COALESCE(resolved_site_id, site_id)');
     }
 
 }

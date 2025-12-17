@@ -7,16 +7,18 @@ use App\Models\User;
 
 class AnomalyStatusService
 {
-    public function approve(DgAnomaly $anomaly, User $actor): void
+    public function approve(DgAnomaly $anomaly, User $actor, ?string $note = null): bool
     {
         // Evita di ri-approvare anomalie già gestite
         if ($anomaly->status && $anomaly->status !== 'open') {
-            return;
+            return false;
         }
 
         $anomaly->status = 'approved';
         $anomaly->approved_at = now();
         $anomaly->approved_by = $actor->getKey();
+
+        $this->appendNote($anomaly, $note, 'Approvazione');
         $anomaly->save();
 
         // Rimuovi flag dalla sessione
@@ -40,24 +42,22 @@ class AnomalyStatusService
                 'note' => $anomaly->note,
             ])
             ->log('Anomalia approvata');
+
+        return true;
     }
 
-    public function reject(DgAnomaly $anomaly, User $actor, ?string $reason = null): void
+    public function reject(DgAnomaly $anomaly, User $actor, ?string $reason = null): bool
     {
         // Evita ri-rifiuti
         if ($anomaly->status && $anomaly->status !== 'open') {
-            return;
+            return false;
         }
 
         $anomaly->status = 'rejected';
         $anomaly->rejected_at = now();
         $anomaly->rejected_by = $actor->getKey();
 
-        if ($reason) {
-            $anomaly->note = $anomaly->note
-                ? ($anomaly->note . "\nRifiuto: {$reason}")
-                : $reason;
-        }
+        $this->appendNote($anomaly, $reason, 'Rifiuto');
 
         $anomaly->save();
 
@@ -79,5 +79,24 @@ class AnomalyStatusService
                 'reason' => $reason,
             ])
             ->log('Anomalia respinta');
+
+        return true;
+    }
+
+    private function appendNote(DgAnomaly $anomaly, ?string $note, string $context): void
+    {
+        $note = trim((string) $note);
+
+        if ($note === '') {
+            return;
+        }
+
+        $contextNote = sprintf('%s: %s', $context, $note);
+
+        if (filled($anomaly->note)) {
+            $anomaly->note = trim($anomaly->note . "\n" . $contextNote);
+        } else {
+            $anomaly->note = $contextNote;
+        }
     }
 }

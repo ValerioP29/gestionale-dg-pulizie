@@ -40,6 +40,7 @@ class MonthlyHoursExport implements WithMultipleSheets
             ->with(['user.mainSite.client', 'resolvedSite', 'site'])
             ->whereBetween('session_date', [$this->start->toDateString(), $this->end->toDateString()])
             ->whereNotNull('user_id')
+            ->reportable()
             ->get();
 
         $sessionsByUser = $sessions->groupBy('user_id');
@@ -52,6 +53,15 @@ class MonthlyHoursExport implements WithMultipleSheets
         $anomalies = DgAnomaly::query()
             ->whereBetween('date', [$this->start->toDateString(), $this->end->toDateString()])
             ->with('session')
+            ->where(function ($query) use ($sessions) {
+                $sessionIds = $sessions->pluck('id')->all();
+
+                $query->whereNull('session_id');
+
+                if (! empty($sessionIds)) {
+                    $query->orWhereIn('session_id', $sessionIds);
+                }
+            })
             ->get();
 
         $anomaliesByUser = $anomalies->groupBy('user_id');

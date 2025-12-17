@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\WorkSessionApprovalStatus;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Spatie\Activitylog\Traits\LogsActivity;
@@ -65,6 +66,17 @@ class DgWorkSession extends Model
     public function site() { return $this->belongsTo(DgSite::class, 'site_id'); }
     public function resolvedSite() { return $this->belongsTo(DgSite::class, 'resolved_site_id'); }
     public function punches() { return $this->hasMany(DgPunch::class, 'session_id'); }
+    public function anomalies() { return $this->hasMany(DgAnomaly::class, 'session_id'); }
+
+    public function scopeReportable(Builder $query): Builder
+    {
+        return $query->whereDoesntHave('anomalies', function ($query) {
+            $query->where(function ($sub) {
+                $sub->whereNull('status')
+                    ->orWhere('status', '!=', 'approved');
+            });
+        });
+    }
 
     /* -------- Computed -------- */
     public function getWorkedHoursAttribute(): float
@@ -88,6 +100,37 @@ class DgWorkSession extends Model
     {
         $flags = $this->anomaly_flags ?? [];
         return is_array($flags) && !empty($flags);
+    }
+
+    public function getWorkedHumanAttribute(): string
+    {
+        return self::formatMinutesHuman($this->worked_minutes);
+    }
+
+    public function getOvertimeHumanAttribute(): string
+    {
+        return self::formatMinutesHuman($this->overtime_minutes);
+    }
+
+    public static function formatMinutesHuman(?int $minutes): string
+    {
+        $minutes = (int) ($minutes ?? 0);
+
+        $sign = $minutes < 0 ? '-' : '';
+        $minutes = abs($minutes);
+
+        $hours = intdiv($minutes, 60);
+        $remainingMinutes = $minutes % 60;
+
+        if ($hours === 0) {
+            return $sign . sprintf('%dm', $remainingMinutes);
+        }
+
+        if ($remainingMinutes === 0) {
+            return $sign . sprintf('%dh', $hours);
+        }
+
+        return $sign . sprintf('%dh %dm', $hours, $remainingMinutes);
     }
 
     public function getAnomalySummaryAttribute(): ?string

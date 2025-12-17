@@ -33,6 +33,7 @@ class WorkReportBuilder
             ])
             ->where('user_id', $userId)
             ->whereBetween('session_date', [$from->toDateString(), $to->toDateString()])
+            ->reportable()
             ->orderBy('session_date')
             ->get();
 
@@ -180,7 +181,8 @@ class WorkReportBuilder
                         $inner->whereNull('resolved_site_id')
                             ->whereIn('site_id', $siteIds);
                     });
-            });
+            })
+            ->reportable();
 
         $siteAggregates = (clone $sessionScope)
             ->selectRaw('COALESCE(resolved_site_id, site_id) AS effective_site_id')
@@ -232,6 +234,7 @@ class WorkReportBuilder
             ->select(['session_id', 'type'])
             ->whereBetween('date', [$from->toDateString(), $to->toDateString()])
             ->whereIn('session_id', $sessionIds)
+            ->where('status', 'approved')
             ->orderBy('session_id')
             ->orderBy('type')
             ->get()
@@ -257,6 +260,7 @@ class WorkReportBuilder
             ->selectRaw('COUNT(DISTINCT session_date) AS days_worked')
             ->where('user_id', $userId)
             ->whereBetween('session_date', [$from->toDateString(), $to->toDateString()])
+            ->reportable()
             ->first();
 
         return [
@@ -275,6 +279,7 @@ class WorkReportBuilder
         return (int) DgAnomaly::query()
             ->whereBetween('date', [$from->toDateString(), $to->toDateString()])
             ->whereIn('session_id', $sessionIds)
+            ->where('status', 'approved')
             ->count();
     }
 
@@ -288,7 +293,8 @@ class WorkReportBuilder
                         $inner->whereNull('resolved_site_id')
                             ->where('site_id', $siteId);
                     });
-            });
+            })
+            ->reportable();
     }
 
     private function anomaliesCountByUser($sessionScope, CarbonImmutable $from, CarbonImmutable $to): array
@@ -300,6 +306,7 @@ class WorkReportBuilder
             ->selectRaw('COUNT(*) AS total')
             ->whereBetween('date', [$from->toDateString(), $to->toDateString()])
             ->whereIn('session_id', $sessionIdsSubQuery)
+            ->where('status', 'approved')
             ->groupBy('user_id')
             ->pluck('total', 'user_id')
             ->toArray();
@@ -313,6 +320,7 @@ class WorkReportBuilder
             ->mergeBindings($sessionIdsSubQuery->getQuery())
             ->join('dg_anomalies', 'dg_anomalies.session_id', '=', 'site_sessions.id')
             ->whereBetween('dg_anomalies.date', [$from->toDateString(), $to->toDateString()])
+            ->where('dg_anomalies.status', 'approved')
             ->groupBy('site_sessions.effective_site_id')
             ->selectRaw('site_sessions.effective_site_id, COUNT(*) AS total')
             ->pluck('total', 'effective_site_id');

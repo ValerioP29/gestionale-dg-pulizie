@@ -17,6 +17,7 @@ use App\Models\DgSiteAssignment;
 use App\Models\User;
 use App\Models\DgAnomaly;
 use Spatie\Activitylog\Models\Activity;
+use Illuminate\Support\Facades\Vite;
 
 use App\Observers\DgPunchObserver;
 use App\Observers\DgUserJustificationObserver;
@@ -45,6 +46,7 @@ class AppServiceProvider extends ServiceProvider
         if (File::exists($manifest)) {
             FilamentAsset::register([
                 Js::make('address-autocomplete', asset('build/assets/address-autocomplete.js')),
+                Js::make('filament-top-scrollbar', Vite::asset('resources/js/filament/top-scrollbar.js')),
             ]);
         }
         // Altrimenti, in dev puoi servirti direttamente di Vite dev server,

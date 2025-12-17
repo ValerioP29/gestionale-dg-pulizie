@@ -15,13 +15,20 @@ class UnderworkRule implements AnomalyRule
             return [];
         }
 
+        $inMissing = is_null($s->check_in);
+        $outMissing = is_null($s->check_out);
+
+        if (method_exists($s, 'isComplete') && $s->isComplete() === false) {
+            return [];
+        }
+
+        if ($inMissing || $outMissing) {
+            return [];
+        }
+
         $worked = $s->worked_minutes;
 
         if (is_null($worked)) {
-            if (! $s->check_in || ! $s->check_out) {
-                return [];
-            }
-
             $worked = CarbonImmutable::parse($s->check_out)
                 ->diffInMinutes(CarbonImmutable::parse($s->check_in));
 

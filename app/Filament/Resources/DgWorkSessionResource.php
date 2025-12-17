@@ -2,13 +2,11 @@
 
 namespace App\Filament\Resources;
 
-use App\Enums\WorkSessionApprovalStatus;
 use App\Filament\Resources\DgWorkSessionResource\Pages;
 use App\Models\DgSite;
 use App\Models\DgWorkSession;
 use App\Models\User;
 use App\Services\Anomalies\AnomalyEngine;
-use App\Services\WorkSessions\WorkSessionApprovalService;
 use Filament\Forms;
 use Filament\Forms\Form;
 use Filament\Resources\Resource;
@@ -66,20 +64,6 @@ class DgWorkSessionResource extends Resource
                 ->label('Straordinari (min)')
                 ->disabled(),
 
-            Forms\Components\Select::make('status')
-                ->options([
-                    'complete' => 'Completa',
-                    'incomplete' => 'Incompleta',
-                    'invalid' => 'Non valida',
-                ])
-                ->label('Stato')
-                ->disabled(),
-
-            Forms\Components\Select::make('approval_status')
-                ->options(WorkSessionApprovalStatus::options())
-                ->label('Approvazione')
-                ->disabled(),
-
             Forms\Components\Textarea::make('extra_reason')
                 ->label('Motivo straordinario')
                 ->columnSpanFull()
@@ -122,24 +106,7 @@ class DgWorkSessionResource extends Resource
 
                 Tables\Columns\TextColumn::make('worked_minutes')
                     ->label('Minuti')
-                    ->sortable(),
-
-                Tables\Columns\BadgeColumn::make('status')
-                    ->colors([
-                        'success' => 'complete',
-                        'warning' => 'incomplete',
-                        'danger'  => 'invalid',
-                    ])
-                    ->label('Stato'),
-
-                Tables\Columns\BadgeColumn::make('approval_status')
-                    ->colors([
-                        'warning' => WorkSessionApprovalStatus::PENDING->value,
-                        'info'    => WorkSessionApprovalStatus::IN_REVIEW->value,
-                        'success' => WorkSessionApprovalStatus::APPROVED->value,
-                        'danger'  => WorkSessionApprovalStatus::REJECTED->value,
-                    ])
-                    ->label('Approvazione')
+                    ->formatStateUsing(fn ($state, DgWorkSession $record) => $record->worked_human)
                     ->sortable(),
 
                 Tables\Columns\IconColumn::make('anomaly_flags')
@@ -158,7 +125,7 @@ class DgWorkSessionResource extends Resource
 
                         return $query->whereBetween('session_date', [$start, $end]);
                     }),
-              SelectFilter::make('user_id')
+                SelectFilter::make('user_id')
                     ->label('Dipendente')
                     ->relationship('user', 'full_name')
                     ->searchable(),
@@ -167,18 +134,6 @@ class DgWorkSessionResource extends Resource
                     ->label('Cantiere')
                     ->options(DgSite::orderBy('name')->pluck('name', 'id'))
                     ->searchable(),
-
-                SelectFilter::make('status')
-                    ->options([
-                        'complete'   => 'Completa',
-                        'incomplete' => 'Incompleta',
-                        'invalid'    => 'Non valida',
-                    ])
-                    ->label('Stato'),
-
-                SelectFilter::make('approval_status')
-                    ->options(WorkSessionApprovalStatus::options())
-                    ->label('Approvazione'),
 
                 Filter::make('mese')
                     ->form([
@@ -210,26 +165,6 @@ class DgWorkSessionResource extends Resource
                 Tables\Actions\CreateAction::make()->visible(fn () => auth()->user()->isRole('admin')),
             ])
             ->bulkActions([
-                Tables\Actions\BulkAction::make('approva')
-                    ->label('Approva selezionate')
-                    ->icon('heroicon-o-check-circle')
-                    ->color('success')
-                    ->requiresConfirmation()
-                    ->authorize(fn (\App\Models\User $user) => $user->can('update', DgWorkSession::make()))
-                    ->action(function ($records) {
-                        $actor = auth()->user();
-                        if (! $actor) {
-                            return;
-                        }
-
-                        $service = app(WorkSessionApprovalService::class);
-
-                        foreach ($records as $session) {
-                            $service->approve($session, $actor);
-                        }
-                    })
-                    ->visible(fn () => auth()->user()->hasAnyRole(['admin','supervisor'])),
-
                 Tables\Actions\BulkAction::make('recalc_anomalies')
                     ->label('Ricalcola anomalie')
                     ->icon('heroicon-o-arrow-path')

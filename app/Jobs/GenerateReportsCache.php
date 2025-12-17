@@ -63,6 +63,7 @@ class GenerateReportsCache implements ShouldQueue
                 ])
                 ->whereBetween('session_date', [$start->toDateString(), $end->toDateString()])
                 ->whereNotNull('user_id')
+                ->reportable()
                 ->orderBy('id');
 
             $aggregates = [];
@@ -82,27 +83,21 @@ class GenerateReportsCache implements ShouldQueue
                         $aggregates[$key] = [
                             'user_id' => $session->user_id,
                             'site_id' => $siteId,
-                            'worked_minutes' => 0,
-                            'overtime_minutes' => 0,
-                            'session_ids' => [],
-                            'dates' => [],
+                            'sessions' => [],
                         ];
                     }
 
-                    $minutes = max(
-                        0,
-                        (int) $session->worked_minutes + (int) ($session->extra_minutes ?? 0),
-                    );
+                    $sessionDate = CarbonImmutable::parse($session->session_date);
 
-                    $aggregates[$key]['worked_minutes'] += $minutes;
-                    $aggregates[$key]['overtime_minutes'] += (int) $session->overtime_minutes;
-
-                    if ($minutes > 0) {
-                        $sessionDate = CarbonImmutable::parse($session->session_date)->toDateString();
-                        $aggregates[$key]['dates'][$sessionDate] = true;
-                    }
-
-                    $aggregates[$key]['session_ids'][] = $session->id;
+                    $aggregates[$key]['sessions'][] = [
+                        'id' => $session->id,
+                        'date' => $sessionDate,
+                        'worked_minutes' => max(
+                            0,
+                            (int) $session->worked_minutes + (int) ($session->extra_minutes ?? 0),
+                        ),
+                        'overtime_minutes' => (int) $session->overtime_minutes,
+                    ];
                     $userIds[$session->user_id] = true;
                 }
 
@@ -145,18 +140,32 @@ class GenerateReportsCache implements ShouldQueue
                 $userId = $aggregate['user_id'];
                 $siteId = $aggregate['site_id'];
 
-                $sessionIds = $aggregate['session_ids'];
-                $workedMinutes = max(0, (int) $aggregate['worked_minutes']);
-                $overtimeMinutes = max(0, (int) $aggregate['overtime_minutes']);
-                $workedHours = round($workedMinutes / 60, 2);
-                $daysPresent = count($aggregate['dates']);
-
                 $user = $users[$userId] ?? null;
+                $range = $this->clampToEmploymentPeriod($start->copy(), $end->copy(), $user);
+
+                if ($range === null) {
+                    continue;
+                }
+
+                [$rangeStart, $rangeEnd] = $range;
+                $sessionData = collect($aggregate['sessions'])
+                    ->filter(fn (array $session) => $rangeStart->lte($session['date']) && $rangeEnd->gte($session['date']));
+
+                $sessionIds = $sessionData->pluck('id')->all();
+                $workedMinutes = max(0, (int) $sessionData->sum('worked_minutes'));
+                $overtimeMinutes = max(0, (int) $sessionData->sum('overtime_minutes'));
+                $workedHours = round($workedMinutes / 60, 2);
+                $daysPresent = $sessionData
+                    ->filter(fn (array $session) => $session['worked_minutes'] > 0)
+                    ->pluck('date')
+                    ->unique(fn (\Carbon\CarbonImmutable $date) => $date->toDateString())
+                    ->count();
+
                 $sitesForUser = isset($sitesPerUser[$userId]) ? count($sitesPerUser[$userId]) : 0;
                 $assignmentSet = $assignments->get($userId, collect())->get($siteId, collect());
                 $expectedDays = $this->calculateExpectedDaysForSite(
-                    $start->copy(),
-                    $end->copy(),
+                    $rangeStart->copy(),
+                    $rangeEnd->copy(),
                     $user,
                     $assignmentSet,
                     $sitesForUser,
@@ -165,7 +174,7 @@ class GenerateReportsCache implements ShouldQueue
                 );
 
                 $anomaliesQuery = DgAnomaly::query()
-                    ->whereBetween('date', [$start->toDateString(), $end->toDateString()])
+                    ->whereBetween('date', [$rangeStart->toDateString(), $rangeEnd->toDateString()])
                     ->where('user_id', $userId);
 
                 if (! empty($sessionIds)) {
@@ -183,8 +192,8 @@ class GenerateReportsCache implements ShouldQueue
                 $justifiedDays = $this->countJustifiedDaysForSite(
                     $calendar,
                     $userId,
-                    $start->copy(),
-                    $end->copy(),
+                    $rangeStart->copy(),
+                    $rangeEnd->copy(),
                     $assignmentSet,
                     $sitesForUser
                 );
