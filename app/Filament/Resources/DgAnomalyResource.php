@@ -14,6 +14,7 @@ use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Filament\Notifications\Notification;
 use Filament\Tables\Filters\SelectFilter;
 use Filament\Tables\Filters\Filter;
 use Illuminate\Database\Eloquent\Builder;
@@ -229,21 +230,30 @@ class DgAnomalyResource extends Resource
                     ->form([
                         Forms\Components\Textarea::make('note_admin')
                             ->label('Motivazione approvazione (opzionale)')
-                            ->maxLength(500),
+                            ->maxLength(500)
+                            ->rows(3)
+                            ->rule('string'),
                     ])
-                    ->visible(fn ($record) => $record->status === 'open' && auth()->user()->hasAnyRole(['admin','supervisor']))
+                    ->visible(fn ($record) => in_array($record->status, ['open', null], true) && auth()->user()->hasAnyRole(['admin','supervisor']))
                     ->action(function ($record, $data) {
                         $actor = auth()->user();
                         if (! $actor) {
+                            Notification::make()
+                                ->title('Utente non autenticato')
+                                ->danger()
+                                ->send();
+
                             return;
                         }
 
                         $service = app(AnomalyStatusService::class);
+                        $approved = $service->approve($record, $actor, $data['note_admin'] ?? null);
 
-                        if (!empty($data['note_admin'])) {
-                            $record->note = $data['note_admin'];
-                        }
-                        $service->approve($record, $actor);
+                        Notification::make()
+                            ->title($approved ? 'Anomalia approvata' : 'Anomalia già gestita')
+                            ->success($approved)
+                            ->danger(! $approved)
+                            ->send();
                     }),
                 Tables\Actions\Action::make('rifiuta')
                     ->label('Respingi')
@@ -253,19 +263,30 @@ class DgAnomalyResource extends Resource
                     ->form([
                         Forms\Components\Textarea::make('note_admin')
                             ->label('Motivazione del rifiuto')
-                            ->required(),
+                            ->required()
+                            ->rows(3)
+                            ->rules(['required', 'string', 'min:3', 'max:500']),
                     ])
-                    ->visible(fn ($record) => $record->status === 'open' && auth()->user()->hasAnyRole(['admin','supervisor']))
+                    ->visible(fn ($record) => in_array($record->status, ['open', null], true) && auth()->user()->hasAnyRole(['admin','supervisor']))
                     ->action(function ($record, $data) {
                         $actor = auth()->user();
                         if (! $actor) {
+                            Notification::make()
+                                ->title('Utente non autenticato')
+                                ->danger()
+                                ->send();
+
                             return;
                         }
 
                         $service = app(AnomalyStatusService::class);
+                        $rejected = $service->reject($record, $actor, $data['note_admin'] ?? null);     // gestisce status, user, timestamp, session update
 
-                        $record->note = $data['note_admin'];   // salva motivazione
-                        $service->reject($record, $actor);     // gestisce status, user, timestamp, session update
+                        Notification::make()
+                            ->title($rejected ? 'Anomalia respinta' : 'Anomalia già gestita')
+                            ->success($rejected)
+                            ->danger(! $rejected)
+                            ->send();
                     }),
                 Tables\Actions\EditAction::make()
                     ->visible(fn () => auth()->user()->hasAnyRole(['admin','supervisor'])),
@@ -280,17 +301,40 @@ class DgAnomalyResource extends Resource
                     ->color('success')
                     ->requiresConfirmation()
                     ->authorize(fn (\App\Models\User $user) => $user->can('update', DgAnomaly::make()))
-                    ->action(function ($records) {
+                    ->form([
+                        Forms\Components\Textarea::make('note_admin')
+                            ->label('Motivazione approvazione (opzionale)')
+                            ->rows(3)
+                            ->maxLength(500)
+                            ->rule('string'),
+                    ])
+                    ->action(function ($records, $data) {
                         $actor = auth()->user();
                         if (! $actor) {
+                            Notification::make()
+                                ->title('Utente non autenticato')
+                                ->danger()
+                                ->send();
+
                             return;
                         }
 
                         $service = app(AnomalyStatusService::class);
+                        $updated = 0;
+                        $openRecords = collect($records)->filter(fn (DgAnomaly $record) => in_array($record->status, ['open', null], true));
 
-                        foreach ($records as $r) {
-                            $service->approve($r, $actor);   // ✅ USA IL METODO NUOVO
+                        foreach ($openRecords as $r) {
+                            if ($service->approve($r, $actor, $data['note_admin'] ?? null)) {
+                                $updated++;
+                            }
                         }
+
+                        Notification::make()
+                            ->title('Approvazione completata')
+                            ->body($updated ? "{$updated} anomalie approvate" : 'Nessuna anomalia aggiornata')
+                            ->success((bool) $updated)
+                            ->danger(! $updated)
+                            ->send();
                     })
                     ->visible(fn () => auth()->user()->hasAnyRole(['admin','supervisor'])),
 
@@ -300,17 +344,40 @@ class DgAnomalyResource extends Resource
                     ->color('danger')
                     ->requiresConfirmation()
                     ->authorize(fn (\App\Models\User $user) => $user->can('update', DgAnomaly::make()))
-                    ->action(function ($records) {
+                    ->form([
+                        Forms\Components\Textarea::make('note_admin')
+                            ->label('Motivazione del rifiuto (opzionale)')
+                            ->rows(3)
+                            ->maxLength(500)
+                            ->rule('string'),
+                    ])
+                    ->action(function ($records, $data) {
                         $actor = auth()->user();
                         if (! $actor) {
+                            Notification::make()
+                                ->title('Utente non autenticato')
+                                ->danger()
+                                ->send();
+
                             return;
                         }
 
                         $service = app(AnomalyStatusService::class);
+                        $updated = 0;
+                        $openRecords = collect($records)->filter(fn (DgAnomaly $record) => in_array($record->status, ['open', null], true));
 
-                        foreach ($records as $r) {
-                            $service->reject($r, $actor);   // ✅ USA IL METODO NUOVO
+                        foreach ($openRecords as $r) {
+                            if ($service->reject($r, $actor, $data['note_admin'] ?? null)) {
+                                $updated++;
+                            }
                         }
+
+                        Notification::make()
+                            ->title('Rifiuto completato')
+                            ->body($updated ? "{$updated} anomalie respinte" : 'Nessuna anomalia aggiornata')
+                            ->success((bool) $updated)
+                            ->danger(! $updated)
+                            ->send();
                     })
                     ->visible(fn () => auth()->user()->hasAnyRole(['admin','supervisor'])),
                 ]);

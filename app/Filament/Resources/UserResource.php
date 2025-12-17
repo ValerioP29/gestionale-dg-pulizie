@@ -127,8 +127,13 @@ class UserResource extends Resource
                     Forms\Components\TextInput::make('email')
                         ->label('Email')
                         ->email()
-                        ->unique(ignoreRecord: true) // niente required
-                        ->nullable(), // permette vuoto
+                        ->required()
+                        ->unique(ignoreRecord: true)
+                        ->validationMessages([
+                            'required' => 'L\'email è obbligatoria.',
+                            'email'    => 'Inserisci un indirizzo email valido.',
+                            'unique'   => 'Questa email è già in uso.',
+                        ]),
 
                     Forms\Components\TextInput::make('phone')
                         ->label('Telefono')

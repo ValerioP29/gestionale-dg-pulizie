@@ -1,12 +1,12 @@
 <x-filament::page>
     <div class="space-y-6">
         <x-filament::section>
-            <div class="flex flex-col gap-6 xl:flex-row xl:items-start xl:justify-between">
-                <div class="w-full max-w-xl">
+            <div class="grid gap-6 lg:grid-cols-[minmax(220px,260px)_1fr] lg:items-start">
+                <div class="w-full max-w-xs">
                     {{ $this->form }}
                 </div>
 
-                <div class="grid flex-1 gap-3 sm:grid-cols-3">
+                <div class="grid flex-1 min-w-0 gap-3 sm:grid-cols-3">
                     <x-filament::card class="p-4">
                         <div class="text-xs font-medium uppercase tracking-wide text-gray-500">Ore totali lavorate</div>
                         <div class="mt-2 text-2xl font-semibold text-gray-900 dark:text-gray-100">
@@ -22,9 +22,9 @@
                     </x-filament::card>
 
                     <x-filament::card class="p-4">
-                        <div class="text-xs font-medium uppercase tracking-wide text-gray-500">Straordinari totali (h)</div>
+                        <div class="text-xs font-medium uppercase tracking-wide text-gray-500">Straordinari totali</div>
                         <div class="mt-2 text-2xl font-semibold text-gray-900 dark:text-gray-100">
-                            {{ number_format($summary['overtime_hours'] ?? 0, 2, ',', '.') }}
+                            {{ \App\Models\DgWorkSession::formatMinutesHuman($summary['overtime_minutes'] ?? 0) }}
                         </div>
                     </x-filament::card>
                 </div>

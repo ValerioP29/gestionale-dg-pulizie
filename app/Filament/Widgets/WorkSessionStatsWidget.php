@@ -26,7 +26,7 @@ class WorkSessionStatsWidget extends StatsOverviewWidget
                 ->color('danger'),
 
             Stat::make('Straordinari', 'minuti totali')
-                ->value(DgWorkSession::sum('overtime_minutes'))
+                ->value(DgWorkSession::formatMinutesHuman(DgWorkSession::sum('overtime_minutes')))
                 ->color('success'),
         ];
     }
